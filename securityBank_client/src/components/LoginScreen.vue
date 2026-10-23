@@ -151,6 +151,22 @@
                                         </div>
                                     </div>
 
+                                    <!-- DNI -->
+                                    <div class="mb-3">
+                                        <label for="loginDNI" class="form-label fw-semibold">
+                                            DNI
+                                        </label>
+
+                                        <input id="loginDNI" v-model.trim="dni" type="text"
+                                            class="form-control form-control-lg" :class="{ 'is-invalid': errors.dni }"
+                                            placeholder="12345678A" autocomplete="username" required maxlength="9"
+                                            @input="errors.dni = ''; serverError = ''" />
+
+                                        <div v-if="errors.dni" class="invalid-feedback">
+                                            {{ errors.dni }}
+                                        </div>
+                                    </div>
+
                                     <!-- Contraseña -->
                                     <div class="mb-3">
                                         <label for="registerPassword" class="form-label fw-semibold">
@@ -259,7 +275,8 @@ export default {
                 name: '',
                 lastName: '',
                 confirmPassword: '',
-                acceptTerms: ''
+                acceptTerms: '',
+                dni: ''
             }
         }
     },
@@ -283,6 +300,31 @@ export default {
         isValidEmail(email) {
             return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
         },
+
+
+        validateDNI(dni) {
+            if (typeof dni !== 'string') {
+                return false
+            }
+
+            // Eliminar espacios al principio y al final y convertir a mayúsculas.
+            dni = dni.trim().toUpperCase()
+
+            // Comprobar formato: 8 números y una letra.
+            if (!/^\d{8}[A-Z]$/.test(dni)) {
+                return false
+            }
+
+            // Letras utilizadas para validar el DNI.
+            const letters = 'TRWAGMYFPDXBNJZSQVHLCKE'
+
+            // Calcular la letra correspondiente al número.
+            const number = parseInt(dni.substring(0, 8), 10)
+            const expectedLetter = letters[number % 23]
+
+            return dni[8] === expectedLetter
+        },
+
 
         validateLogin() {
             this.clearErrors()
@@ -403,9 +445,10 @@ export default {
             try {
                 const response = await api.post('/register', {
                     name: this.name,
-                    lastName: this.lastName,
+                    surname: this.lastName,
                     email: this.email,
-                    password: this.password
+                    password: this.password,
+                    dni: this.dni
                 })
 
                 // Llveamos el evento al padre
