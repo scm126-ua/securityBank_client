@@ -2,7 +2,7 @@
   <header>
     <div class="wrapper">
       <div v-if="!isAuthenticated">
-        <LoginScreen :login-success="isAuthenticated = true" />
+        <LoginScreen @login-success="handleLoginSuccess" />
       </div>
       <div v-else>
         <SecurityBankMainView />
@@ -30,7 +30,14 @@ export default {
     return {
       isAuthenticated: false
     }
+  },
+
+  methods: {
+    handleLoginSuccess() {
+      this.isAuthenticated = true;
+    }
   }
+
 
 
 
@@ -41,6 +48,4 @@ export default {
 
 </script>
 
-<style scoped>
-
-</style>
+<style scoped></style>

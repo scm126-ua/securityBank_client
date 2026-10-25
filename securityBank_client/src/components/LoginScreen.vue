@@ -419,8 +419,6 @@ export default {
                     password: this.password
                 })
 
-
-
                 this.$emit('login-success', response.data)
             } catch (error) {
                 if (error.response?.status === 401) {
