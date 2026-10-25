@@ -2,7 +2,7 @@
   <header>
     <div class="wrapper">
       <div v-if="!isAuthenticated">
-        <LoginScreen />
+        <LoginScreen :login-success="isAuthenticated = true" />
       </div>
       <div v-else>
         <SecurityBankMainView />
@@ -14,13 +14,15 @@
 
 <script>
 import LoginScreen from './components/LoginScreen.vue';
+import SecurityBankMainView from './components/SecurityBankMainView.vue';
 
 
 export default {
 
   // Componentes importados
   components: {
-    LoginScreen
+    LoginScreen,
+    SecurityBankMainView
   },
 
   // Datos de la propia plantilla
