@@ -414,13 +414,15 @@ export default {
             this.loading = true
 
             try {
+
                 const response = await api.post('/login', {
                     email: this.email,
                     password: this.password
-                }).then((response) => {
-                    localStorage.setItem('token', response.data.token);
-                    this.$emit('login-success', response.data)
                 })
+
+                localStorage.setItem('token', response.data.token)
+                this.$emit('login-success', response.data)
+
 
             } catch (error) {
                 console.log(error);

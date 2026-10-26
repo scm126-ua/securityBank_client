@@ -83,6 +83,7 @@
 
 
 <script lang="ts">
+import api from '@/api/axios';
 import axios from 'axios'
 
 interface Account {
@@ -112,11 +113,14 @@ export default {
             this.error = ''
 
             try {
-                const response = await axios.get('/accounts', {
+                await api.get('/accounts', {
                     
+                }).then((response) => {
+                    console.log(response)
+                    this.accounts = response.data.accounts || []
                 })
 
-                this.accounts = response.data.accounts || []
+
             } catch (err) {
                 console.error('Error al cargar las cuentas:', err)
                 this.error = 'No se han podido cargar tus cuentas.'
