@@ -84,7 +84,6 @@
 
 <script lang="ts">
 import api from '@/api/axios';
-import axios from 'axios'
 
 interface Account {
     id: number
@@ -116,7 +115,6 @@ export default {
                 await api.get('/accounts', {
                     
                 }).then((response) => {
-                    console.log(response)
                     this.accounts = response.data.accounts || []
                 })
 

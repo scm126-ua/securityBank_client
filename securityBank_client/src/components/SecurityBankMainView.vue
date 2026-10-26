@@ -1,6 +1,6 @@
+```vue
 <template>
     <div class="bank-page">
-
         <!-- Navbar -->
         <nav class="navbar navbar-expand-lg navbar-dark bank-navbar">
             <div class="container">
@@ -19,86 +19,144 @@
 
         <!-- Contenido -->
         <div class="container py-5">
-
             <h2 class="fw-bold mb-2">Bienvenido a SecurityBank</h2>
             <p class="text-secondary mb-4">
                 Consulta el estado de tu cuenta bancaria.
             </p>
 
-            <!-- Saldo -->
+            <!-- Saldo real de la cuenta -->
             <div class="card balance-card mb-4">
                 <div class="card-body p-4">
                     <p class="mb-2">Saldo disponible</p>
-                    <h1 class="fw-bold">8.420,50 €</h1>
-                    <p class="mb-0">
+
+                    <h1 class="fw-bold">
+                        {{ formatBalance(selectedAccount.balance) }}
+                    </h1>
+
+                    <p class="mb-2">
                         <i class="bi bi-credit-card me-2"></i>
-                        Cuenta personal ···· 4821
+                        Cuenta {{ selectedAccount.id }}
+                    </p>
+
+                    <p class="mb-2">
+                        <i class="bi bi-bank me-2"></i>
+                        {{ selectedAccount.iban }}
+                    </p>
+
+                    <span class="badge" :class="selectedAccount.status === 'ACTIVE'
+                        ? 'text-bg-success'
+                        : 'text-bg-secondary'">
+                        {{ selectedAccount.status }}
+                    </span>
+
+                    <p class="mt-3 mb-0 small">
+                        <i class="bi bi-calendar3 me-2"></i>
+                        Creada el {{ formatDate(selectedAccount.created_at) }}
                     </p>
                 </div>
             </div>
 
-            <!-- Acciones -->
-            <div class="row g-3 mb-5">
-                <h2 clas="center"> Movimientos </h2>
+            <!-- Acciones de movimientos -->
+            <div class="row g-3 mb-5" id="movimientos">
+                <div class="col-12">
+                    <h3 class="fw-bold">Movimientos</h3>
+                    <p class="text-secondary">
+                        Consulta las operaciones de esta cuenta.
+                    </p>
+                </div>
 
                 <div class="col-md-4">
-                    <button class="btn btn-primary w-100 py-3">
+                    <button class="btn btn-primary w-100 py-3" @click="movementFilter = 'ALL'">
                         <i class="bi bi-arrow-left-right me-2"></i>
                         Todos
                     </button>
                 </div>
 
                 <div class="col-md-4">
-                    <button class="btn btn-outline-primary w-100 py-3">
-                        <i class="bi bi-credit-card me-2"></i>
+                    <button class="btn btn-outline-primary w-100 py-3" @click="movementFilter = 'INCOME'">
+                        <i class="bi bi-graph-up-arrow me-2"></i>
                         Ingresos
                     </button>
                 </div>
 
                 <div class="col-md-4">
-                    <button class="btn btn-outline-primary w-100 py-3">
-                        <i class="bi bi-person me-2"></i>
+                    <button class="btn btn-outline-primary w-100 py-3" @click="movementFilter = 'EXPENSE'">
+                        <i class="bi bi-graph-down-arrow me-2"></i>
                         Gastos
                     </button>
                 </div>
             </div>
 
-            <!-- Movimientos -->
-            <div class="card" id="movimientos">
+            <!-- Movimientos pendientes de conectar con la API -->
+            <div class="card">
                 <div class="card-header bg-white py-3">
                     <h5 class="mb-0 fw-bold">Últimos movimientos</h5>
                 </div>
 
-                <div class="card-body">
-                    <div class="movement">
-                        <span>
-                            <i class="bi bi-wallet2 me-2 text-primary"></i>
-                            Nómina
-                        </span>
-                        <strong class="text-success">+1.200,00 €</strong>
-                    </div>
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-receipt empty-icon"></i>
 
-                    <div class="movement">
-                        <span>
-                            <i class="bi bi-cart me-2 text-primary"></i>
-                            Compra supermercado
-                        </span>
-                        <strong>-46,85 €</strong>
-                    </div>
+                    <h5 class="mt-3">Movimientos no disponibles</h5>
 
-                    <div class="movement">
-                        <span>
-                            <i class="bi bi-receipt me-2 text-primary"></i>
-                            Suscripción
-                        </span>
-                        <strong>-13,99 €</strong>
-                    </div>
+                    <p class="text-secondary mb-0">
+                        Todavía no se han conectado los movimientos de esta cuenta
+                        con el backend.
+                    </p>
                 </div>
             </div>
-
         </div>
     </div>
 </template>
+
+<script>
+export default {
+    props: {
+        selectedAccount: {
+            type: Object,
+            required: true
+        }
+    },
+
+    data() {
+        return {
+            movementFilter: 'ALL'
+        }
+    },
+
+    methods: {
+        formatBalance(balance) {
+            const amount = Number(balance)
+
+            if (!Number.isFinite(amount)) {
+                return '—'
+            }
+
+            return amount.toLocaleString('es-ES', {
+                style: 'currency',
+                currency: 'EUR'
+            })
+        },
+
+        formatDate(date) {
+            if (!date) {
+                return 'No disponible'
+            }
+
+            const parsedDate = new Date(date)
+
+            if (Number.isNaN(parsedDate.getTime())) {
+                return 'No disponible'
+            }
+
+            return parsedDate.toLocaleDateString('es-ES', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric'
+            })
+        }
+    }
+}
+</script>
 
 <style scoped>
 .bank-page {
@@ -127,16 +185,9 @@
     border: 1px solid #e2e8f0;
 }
 
-.movement {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 18px 0;
-    border-bottom: 1px solid #edf0f5;
-}
-
-.movement:last-child {
-    border-bottom: none;
+.empty-icon {
+    font-size: 3rem;
+    color: #94a3b8;
 }
 
 .btn {
@@ -153,4 +204,16 @@
     background-color: #0f2d4d;
     border-color: #0f2d4d;
 }
+
+.btn-outline-primary {
+    color: #163b65;
+    border-color: #163b65;
+}
+
+.btn-outline-primary:hover {
+    background-color: #163b65;
+    border-color: #163b65;
+    color: white;
+}
 </style>
+```

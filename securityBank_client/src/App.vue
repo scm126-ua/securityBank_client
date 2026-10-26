@@ -5,7 +5,9 @@
         <LoginScreen @login-success="handleLoginSuccess" />
       </div>
       <div v-else>
-        <UserAccounts />
+        <UserAccounts v-if="!selectedAccount" @select-account="handleSelectAccount" />
+
+        <SecurityBankMainView v-else :selectedAccount="selectedAccount"></SecurityBankMainView>
       </div>
     </div>
   </header>
@@ -14,6 +16,7 @@
 
 <script>
 import LoginScreen from './components/LoginScreen.vue';
+import SecurityBankMainView from './components/SecurityBankMainView.vue';
 import UserAccounts from './components/UserAccounts.vue';
 
 
@@ -22,19 +25,26 @@ export default {
   // Componentes importados
   components: {
     LoginScreen,
-    UserAccounts
+    UserAccounts,
+    SecurityBankMainView
   },
 
   // Datos de la propia plantilla
   data() {
     return {
-      isAuthenticated: false
+      isAuthenticated: false,
+      selectedAccount: null
     }
   },
 
   methods: {
     handleLoginSuccess() {
       this.isAuthenticated = true;
+    },
+
+    handleSelectAccount(account){
+      console.log("EN handle", account)
+      this.selectedAccount = account
     }
   }
 
