@@ -417,10 +417,13 @@ export default {
                 const response = await api.post('/login', {
                     email: this.email,
                     password: this.password
+                }).then((response) => {
+                    localStorage.setItem('token', response.data.token);
+                    this.$emit('login-success', response.data)
                 })
 
-                this.$emit('login-success', response.data)
             } catch (error) {
+                console.log(error);
                 if (error.response?.status === 401) {
                     this.serverError = 'Correo o contraseña incorrectos.'
                 } else {

@@ -9,5 +9,4 @@ const api = axios.create({
     Accept: 'application/json'
   }
 })
-
 export default api

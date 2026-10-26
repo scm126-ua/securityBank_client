@@ -5,7 +5,7 @@
         <LoginScreen @login-success="handleLoginSuccess" />
       </div>
       <div v-else>
-        <SecurityBankMainView />
+        <UserAccounts />
       </div>
     </div>
   </header>
@@ -14,7 +14,7 @@
 
 <script>
 import LoginScreen from './components/LoginScreen.vue';
-import SecurityBankMainView from './components/SecurityBankMainView.vue';
+import UserAccounts from './components/UserAccounts.vue';
 
 
 export default {
@@ -22,7 +22,7 @@ export default {
   // Componentes importados
   components: {
     LoginScreen,
-    SecurityBankMainView
+    UserAccounts
   },
 
   // Datos de la propia plantilla
