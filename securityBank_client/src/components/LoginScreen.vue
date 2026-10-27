@@ -255,8 +255,10 @@ import {
     encryptPrivateKeys,
     exportPublicKey,
     generateUserKeyPairs,
+    importServerSigningPublicKey,
     restorePrivateKeys,
-    signChallenge
+    signChallenge,
+    verifyUserPublicKeysCertificate
 } from '../services/crypto'
 import { storePrivateKeys } from '../services/keyStore'
 
@@ -431,6 +433,10 @@ export default {
             this.loading = true
 
             try {
+                const identityResponse = await api.get('/server/public-key')
+                const serverPublicKey = await importServerSigningPublicKey(
+                    identityResponse.data
+                )
                 const challengeResponse = await api.post('/login/challenge', {
                     email: this.email,
                     password: this.password
@@ -448,6 +454,14 @@ export default {
                     signature
                 })
 
+                const certificateIsValid = await verifyUserPublicKeysCertificate(
+                    serverPublicKey,
+                    response.data.user
+                )
+                if (!certificateIsValid) {
+                    throw new Error('El certificado de las claves del usuario no es válido')
+                }
+
                 storePrivateKeys(privateKeys)
                 localStorage.setItem('token', response.data.token)
                 this.$emit('login-success', response.data)
@@ -457,6 +471,7 @@ export default {
                 } else {
                     this.serverError =
                         error.response?.data?.error ||
+                        error.message ||
                         'No se ha podido iniciar sesión. Inténtalo de nuevo.'
                 }
             } finally {

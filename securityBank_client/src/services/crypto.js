@@ -7,6 +7,7 @@ const pbkdf2Iterations = 600000
 const privateKeyBundleContext = new TextEncoder().encode(
     'securitybank-private-key-bundle-v1'
 )
+const userKeyCertificateVersion = 'securitybank-user-keys-v1'
 
 // Convierte datos binarios a Base64 para poder transportarlos como texto.
 function arrayBufferToBase64(buffer) {
@@ -44,6 +45,33 @@ function normalizeData(data) {
     }
 
     throw new TypeError('Los datos deben ser texto o contenido binario')
+}
+
+// Construye la misma representación inequívoca que firma el servidor.
+function userKeyCertificatePayload(email, publicKey, signingPublicKey) {
+    const encoder = new TextEncoder()
+    const fields = [
+        userKeyCertificateVersion,
+        email.trim().toLowerCase(),
+        publicKey,
+        signingPublicKey
+    ].map((field) => encoder.encode(field))
+    const payloadLength = fields.reduce(
+        (length, field) => length + 4 + field.length,
+        0
+    )
+    const payload = new Uint8Array(payloadLength)
+    const view = new DataView(payload.buffer)
+    let offset = 0
+
+    fields.forEach((field) => {
+        view.setUint32(offset, field.length)
+        offset += 4
+        payload.set(field, offset)
+        offset += field.length
+    })
+
+    return payload
 }
 
 // Deriva una clave AES no exportable a partir de la contraseña y la sal.
@@ -242,6 +270,73 @@ export async function signChallenge(signingPrivateKey, encodedChallenge) {
     )
 
     return arrayBufferToBase64(signature)
+}
+
+// Importa y valida la identidad pública publicada por el servidor.
+export async function importServerSigningPublicKey(identity) {
+    if (
+        identity?.version !== 1 ||
+        identity?.public_key_algorithm !== 'RSA-3072' ||
+        identity?.signature_algorithm !== 'RSA-PSS-SHA256' ||
+        identity?.jwt_algorithm !== 'RS256'
+    ) {
+        throw new Error('La identidad criptográfica del servidor no es compatible')
+    }
+
+    const encodedPublicKey = base64ToBytes(identity.public_key)
+    const fingerprint = await crypto.subtle.digest('SHA-256', encodedPublicKey)
+    const encodedFingerprint = Array.from(new Uint8Array(fingerprint))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('')
+
+    if (encodedFingerprint !== identity.fingerprint_sha256) {
+        throw new Error('La huella de la clave pública del servidor no coincide')
+    }
+
+    const publicKey = await crypto.subtle.importKey(
+        'spki',
+        encodedPublicKey,
+        {
+            name: 'RSA-PSS',
+            hash: 'SHA-256'
+        },
+        false,
+        ['verify']
+    )
+
+    if (publicKey.algorithm.modulusLength !== 3072) {
+        throw new Error('La clave pública del servidor no es RSA-3072')
+    }
+
+    return publicKey
+}
+
+// Verifica que el servidor haya certificado el correo y las claves públicas del usuario.
+export async function verifyUserPublicKeysCertificate(serverPublicKey, user) {
+    if (
+        !user?.email ||
+        !user?.public_key ||
+        !user?.signing_public_key ||
+        !user?.public_keys_signature
+    ) {
+        return false
+    }
+
+    const payload = userKeyCertificatePayload(
+        user.email,
+        user.public_key,
+        user.signing_public_key
+    )
+
+    return crypto.subtle.verify(
+        {
+            name: 'RSA-PSS',
+            saltLength: 32
+        },
+        serverPublicKey,
+        base64ToBytes(user.public_keys_signature),
+        payload
+    )
 }
 
 // Genera una clave AES-256 aleatoria para proteger un único recurso.
