@@ -31,6 +31,21 @@ function randomBytes(length) {
     return crypto.getRandomValues(new Uint8Array(length))
 }
 
+// Convierte texto o datos binarios a un formato aceptado por Web Crypto.
+function normalizeData(data) {
+    if (typeof data === 'string') {
+        return new TextEncoder().encode(data)
+    }
+    if (data instanceof ArrayBuffer) {
+        return new Uint8Array(data)
+    }
+    if (ArrayBuffer.isView(data)) {
+        return new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+    }
+
+    throw new TypeError('Los datos deben ser texto o contenido binario')
+}
+
 // Deriva una clave AES no exportable a partir de la contraseña y la sal.
 async function derivePrivateKeyEncryptionKey(password, salt) {
     const passwordKey = await crypto.subtle.importKey(
@@ -213,4 +228,60 @@ export async function signChallenge(signingPrivateKey, encodedChallenge) {
     )
 
     return arrayBufferToBase64(signature)
+}
+
+// Genera una clave AES-256 aleatoria para proteger un único recurso.
+export async function generateDataEncryptionKey() {
+    return crypto.subtle.generateKey(
+        {
+            name: 'AES-GCM',
+            length: 256
+        },
+        true,
+        ['encrypt', 'decrypt']
+    )
+}
+
+// Cifra datos con AES-GCM y un nonce aleatorio de 12 bytes.
+export async function encryptData(encryptionKey, data) {
+    const nonce = randomBytes(12)
+    const ciphertext = await crypto.subtle.encrypt(
+        {
+            name: 'AES-GCM',
+            iv: nonce
+        },
+        encryptionKey,
+        normalizeData(data)
+    )
+
+    return {
+        algorithm: 'AES-256-GCM',
+        nonce: arrayBufferToBase64(nonce),
+        ciphertext: arrayBufferToBase64(ciphertext)
+    }
+}
+
+// Descifra y verifica la integridad de datos protegidos con AES-GCM.
+export async function decryptData(encryptionKey, encryptedData) {
+    const nonce = base64ToBytes(encryptedData?.nonce)
+    const ciphertext = base64ToBytes(encryptedData?.ciphertext)
+
+    if (
+        encryptedData?.algorithm !== 'AES-256-GCM' ||
+        nonce.length !== 12 ||
+        ciphertext.length < 16
+    ) {
+        throw new Error('El formato de los datos cifrados no es válido')
+    }
+
+    const plaintext = await crypto.subtle.decrypt(
+        {
+            name: 'AES-GCM',
+            iv: nonce
+        },
+        encryptionKey,
+        ciphertext
+    )
+
+    return new Uint8Array(plaintext)
 }
