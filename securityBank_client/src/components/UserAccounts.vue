@@ -138,7 +138,7 @@ export default {
             return new Intl.NumberFormat('es-ES', {
                 style: 'currency',
                 currency: 'EUR',
-            }).format(balance / 100)
+            }).format(balance)
         },
 
         openAccount(account: Account) {
