@@ -200,3 +200,17 @@ export async function restorePrivateKeys(bundle, password) {
 
     return { encryption, signing }
 }
+
+// Firma un desafío recibido en Base64 con la clave privada de firma.
+export async function signChallenge(signingPrivateKey, encodedChallenge) {
+    const signature = await crypto.subtle.sign(
+        {
+            name: 'RSA-PSS',
+            saltLength: 32
+        },
+        signingPrivateKey,
+        base64ToBytes(encodedChallenge)
+    )
+
+    return arrayBufferToBase64(signature)
+}
