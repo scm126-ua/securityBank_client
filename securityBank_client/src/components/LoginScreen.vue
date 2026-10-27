@@ -251,6 +251,11 @@
 
 <script>
 import api from '../api/axios'
+import {
+    encryptPrivateKeys,
+    exportPublicKey,
+    generateUserKeyPairs
+} from '../services/crypto'
 
 export default {
     name: 'LoginScreen',
@@ -455,12 +460,22 @@ export default {
             this.loading = true
 
             try {
+                const keyPairs = await generateUserKeyPairs()
+                const [publicKey, signingPublicKey, privateKeyBundle] = await Promise.all([
+                    exportPublicKey(keyPairs.encryption.publicKey),
+                    exportPublicKey(keyPairs.signing.publicKey),
+                    encryptPrivateKeys(keyPairs, this.password)
+                ])
+
                 const response = await api.post('/register', {
                     name: this.name,
                     surname: this.lastName,
                     email: this.email,
                     password: this.password,
-                    dni: this.dni.trim().toUpperCase()
+                    dni: this.dni.trim().toUpperCase(),
+                    public_key: publicKey,
+                    signing_public_key: signingPublicKey,
+                    private_key_bundle: privateKeyBundle
                 })
 
                 // Llveamos el evento al padre
