@@ -473,7 +473,7 @@ export default {
                 this.serverError = 'Registro completado. Ya puedes iniciar sesión.'
             } catch (error) {
                 this.serverError =
-                    error.response?.data?.message ||
+                    error.response?.data?.error ||
                     'No se ha podido completar el registro. Inténtalo de nuevo.'
             } finally {
                 this.loading = false
