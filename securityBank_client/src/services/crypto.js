@@ -191,6 +191,20 @@ export async function importEncryptionPrivateKey(encodedKey) {
     )
 }
 
+// Importa la clave pública destinada a proteger claves AES.
+export async function importEncryptionPublicKey(encodedKey) {
+    return crypto.subtle.importKey(
+        'spki',
+        base64ToBytes(encodedKey),
+        {
+            name: 'RSA-OAEP',
+            hash: 'SHA-256'
+        },
+        false,
+        ['encrypt']
+    )
+}
+
 // Importa la clave privada destinada a firmar desafíos de autenticación.
 export async function importSigningPrivateKey(encodedKey) {
     return crypto.subtle.importKey(
@@ -284,4 +298,44 @@ export async function decryptData(encryptionKey, encryptedData) {
     )
 
     return new Uint8Array(plaintext)
+}
+
+// Protege una clave AES con la clave pública RSA-OAEP del usuario.
+export async function encryptDataKey(encryptionKey, publicKey) {
+    const rawKey = await crypto.subtle.exportKey('raw', encryptionKey)
+    const encryptedKey = await crypto.subtle.encrypt(
+        {
+            name: 'RSA-OAEP'
+        },
+        publicKey,
+        rawKey
+    )
+
+    return arrayBufferToBase64(encryptedKey)
+}
+
+// Recupera una clave AES y la importa de nuevo como no exportable.
+export async function decryptDataKey(encodedKey, privateKey) {
+    const rawKey = await crypto.subtle.decrypt(
+        {
+            name: 'RSA-OAEP'
+        },
+        privateKey,
+        base64ToBytes(encodedKey)
+    )
+
+    if (rawKey.byteLength !== 32) {
+        throw new Error('La clave AES recuperada no tiene 256 bits')
+    }
+
+    return crypto.subtle.importKey(
+        'raw',
+        rawKey,
+        {
+            name: 'AES-GCM',
+            length: 256
+        },
+        false,
+        ['encrypt', 'decrypt']
+    )
 }
