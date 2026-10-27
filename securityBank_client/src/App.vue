@@ -7,7 +7,8 @@
       <div v-else>
         <UserAccounts v-if="!selectedAccount" @select-account="handleSelectAccount" />
 
-        <SecurityBankMainView v-else :selectedAccount="selectedAccount"></SecurityBankMainView>
+        <SecurityBankMainView v-else :selectedAccount="selectedAccount"
+          @back-to-accounts="handleReturnToAccounts" @account-closed="handleReturnToAccounts" />
       </div>
     </div>
   </header>
@@ -42,9 +43,14 @@ export default {
       this.isAuthenticated = true;
     },
 
-    handleSelectAccount(account){
+    handleSelectAccount(account) {
       console.log("EN handle", account)
       this.selectedAccount = account
+    },
+
+    // Vuelve al listado para cargar de nuevo las cuentas del usuario.
+    handleReturnToAccounts() {
+      this.selectedAccount = null
     }
   }
 

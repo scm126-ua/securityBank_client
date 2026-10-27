@@ -63,8 +63,10 @@
                                 <span class="fw-bold">SB</span>
                             </div>
 
-                            <span class="text-muted small">
-                                Cuenta bancaria
+                            <span class="badge" :class="account.status === 'ACTIVE'
+                                ? 'text-bg-success'
+                                : 'text-bg-secondary'">
+                                {{ account.status }}
                             </span>
                         </div>
 
@@ -101,6 +103,7 @@ interface Account {
     id: number
     iban: string
     balance: number
+    status: string
 }
 
 export default {

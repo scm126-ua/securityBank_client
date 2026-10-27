@@ -24,6 +24,22 @@
                 Consulta el estado de tu cuenta bancaria.
             </p>
 
+            <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
+                <button type="button" class="btn btn-outline-secondary" @click="$emit('back-to-accounts')">
+                    &larr; Volver a mis cuentas
+                </button>
+
+                <button v-if="selectedAccount.status === 'ACTIVE'" type="button" class="btn btn-outline-danger"
+                    :disabled="closing" @click="closeAccount">
+                    <span v-if="closing" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    {{ closing ? 'Cerrando...' : 'Cerrar cuenta' }}
+                </button>
+            </div>
+
+            <div v-if="closeError" class="alert alert-danger" role="alert">
+                {{ closeError }}
+            </div>
+
             <!-- Saldo real de la cuenta -->
             <div class="card balance-card mb-4">
                 <div class="card-body p-4">
@@ -109,6 +125,8 @@
 </template>
 
 <script>
+import api from '@/api/axios'
+
 export default {
     props: {
         selectedAccount: {
@@ -119,11 +137,38 @@ export default {
 
     data() {
         return {
-            movementFilter: 'ALL'
+            movementFilter: 'ALL',
+            closing: false,
+            closeError: ''
         }
     },
 
     methods: {
+        // Solicita confirmación y cierra la cuenta seleccionada.
+        async closeAccount() {
+            const confirmed = window.confirm(
+                'La cuenta se cerrará de forma permanente. ¿Deseas continuar?'
+            )
+
+            if (!confirmed || this.closing) {
+                return
+            }
+
+            this.closing = true
+            this.closeError = ''
+
+            try {
+                await api.patch(`/accounts/${this.selectedAccount.id}/close`)
+                this.$emit('account-closed')
+            } catch (error) {
+                console.error('Error al cerrar la cuenta:', error)
+                this.closeError = error.response?.data?.error ||
+                    'No se ha podido cerrar la cuenta.'
+            } finally {
+                this.closing = false
+            }
+        },
+
         formatBalance(balance) {
             const amount = Number(balance)
 
