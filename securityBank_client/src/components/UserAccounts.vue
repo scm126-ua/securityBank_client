@@ -1,6 +1,6 @@
 <template>
     <div class="container mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
             <div>
                 <h4 class="fw-bold mb-1">Mis cuentas</h4>
                 <p class="text-muted mb-0">
@@ -8,9 +8,21 @@
                 </p>
             </div>
 
-            <span class="badge rounded-pill text-bg-primary">
-                {{ accounts.length }} cuentas
-            </span>
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge rounded-pill text-bg-primary">
+                    {{ accounts.length }} cuentas
+                </span>
+
+                <button type="button" class="btn btn-primary" :disabled="creating" @click="createAccount">
+                    <span v-if="creating" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                    {{ creating ? 'Creando...' : 'Nueva cuenta' }}
+                </button>
+            </div>
+        </div>
+
+        <!-- Error al crear una cuenta -->
+        <div v-if="actionError" class="alert alert-danger" role="alert">
+            {{ actionError }}
         </div>
 
         <!-- Cargando cuentas -->
@@ -98,7 +110,9 @@ export default {
         return {
             accounts: [] as Account[],
             loading: false,
+            creating: false,
             error: '',
+            actionError: '',
         }
     },
 
@@ -124,6 +138,30 @@ export default {
                 this.error = 'No se han podido cargar tus cuentas.'
             } finally {
                 this.loading = false
+            }
+        },
+
+        // Crea una cuenta bancaria y la añade al listado actual.
+        async createAccount() {
+            if (this.creating) {
+                return
+            }
+
+            this.creating = true
+            this.actionError = ''
+
+            try {
+                const response = await api.post('/accounts')
+                const account = response.data.account
+
+                if (account) {
+                    this.accounts.push(account)
+                }
+            } catch (err) {
+                console.error('Error al crear la cuenta:', err)
+                this.actionError = 'No se ha podido crear la cuenta.'
+            } finally {
+                this.creating = false
             }
         },
 
