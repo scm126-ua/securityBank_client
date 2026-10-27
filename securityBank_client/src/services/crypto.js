@@ -161,3 +161,42 @@ export async function decryptPrivateKeys(bundle, password) {
 
     return JSON.parse(new TextDecoder().decode(plaintext))
 }
+
+// Importa la clave privada destinada a descifrar claves AES.
+export async function importEncryptionPrivateKey(encodedKey) {
+    return crypto.subtle.importKey(
+        'pkcs8',
+        base64ToBytes(encodedKey),
+        {
+            name: 'RSA-OAEP',
+            hash: 'SHA-256'
+        },
+        false,
+        ['decrypt']
+    )
+}
+
+// Importa la clave privada destinada a firmar desafíos de autenticación.
+export async function importSigningPrivateKey(encodedKey) {
+    return crypto.subtle.importKey(
+        'pkcs8',
+        base64ToBytes(encodedKey),
+        {
+            name: 'RSA-PSS',
+            hash: 'SHA-256'
+        },
+        false,
+        ['sign']
+    )
+}
+
+// Descifra e importa las dos claves privadas como claves no exportables.
+export async function restorePrivateKeys(bundle, password) {
+    const encodedKeys = await decryptPrivateKeys(bundle, password)
+    const [encryption, signing] = await Promise.all([
+        importEncryptionPrivateKey(encodedKeys.encryption),
+        importSigningPrivateKey(encodedKeys.signing)
+    ])
+
+    return { encryption, signing }
+}
