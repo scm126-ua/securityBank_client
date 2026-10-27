@@ -265,6 +265,7 @@ export default {
             confirmPassword: '',
             name: '',
             lastName: '',
+            dni: '',
             acceptTerms: false,
 
             serverError: '',
@@ -376,6 +377,14 @@ export default {
                 valid = false
             }
 
+            if (!this.dni) {
+                this.errors.dni = 'Introduce tu DNI.'
+                valid = false
+            } else if (!this.validateDNI(this.dni)) {
+                this.errors.dni = 'Introduce un DNI válido.'
+                valid = false
+            }
+
             if (!this.password) {
                 this.errors.password = 'Introduce una contraseña.'
                 valid = false
@@ -451,7 +460,7 @@ export default {
                     surname: this.lastName,
                     email: this.email,
                     password: this.password,
-                    dni: this.dni
+                    dni: this.dni.trim().toUpperCase()
                 })
 
                 // Llveamos el evento al padre
