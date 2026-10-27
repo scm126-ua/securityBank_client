@@ -254,8 +254,11 @@ import api from '../api/axios'
 import {
     encryptPrivateKeys,
     exportPublicKey,
-    generateUserKeyPairs
+    generateUserKeyPairs,
+    restorePrivateKeys,
+    signChallenge
 } from '../services/crypto'
+import { storePrivateKeys } from '../services/keyStore'
 
 export default {
     name: 'LoginScreen',
@@ -428,23 +431,32 @@ export default {
             this.loading = true
 
             try {
-
-                const response = await api.post('/login', {
+                const challengeResponse = await api.post('/login/challenge', {
                     email: this.email,
                     password: this.password
                 })
+                const privateKeys = await restorePrivateKeys(
+                    challengeResponse.data.private_key_bundle,
+                    this.password
+                )
+                const signature = await signChallenge(
+                    privateKeys.signing,
+                    challengeResponse.data.challenge
+                )
+                const response = await api.post('/login/verify', {
+                    challenge_id: challengeResponse.data.challenge_id,
+                    signature
+                })
 
+                storePrivateKeys(privateKeys)
                 localStorage.setItem('token', response.data.token)
                 this.$emit('login-success', response.data)
-
-
             } catch (error) {
-                console.log(error);
                 if (error.response?.status === 401) {
                     this.serverError = 'Correo o contraseña incorrectos.'
                 } else {
                     this.serverError =
-                        error.response?.data?.message ||
+                        error.response?.data?.error ||
                         'No se ha podido iniciar sesión. Inténtalo de nuevo.'
                 }
             } finally {
