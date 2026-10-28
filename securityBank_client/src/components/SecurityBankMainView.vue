@@ -29,6 +29,13 @@
                     &larr; Volver a mis cuentas
                 </button>
 
+                <button type="button" class="btn btn-outline-primary" :disabled="generatingCertificate"
+                    @click="downloadOwnershipCertificate">
+                    <span v-if="generatingCertificate" class="spinner-border spinner-border-sm me-2"
+                        aria-hidden="true"></span>
+                    {{ generatingCertificate ? 'Generando...' : 'Descargar certificado de titularidad' }}
+                </button>
+
                 <button v-if="selectedAccount.status === 'ACTIVE'" type="button" class="btn btn-outline-danger"
                     :disabled="closing" @click="closeAccount">
                     <span v-if="closing" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
@@ -38,6 +45,10 @@
 
             <div v-if="closeError" class="alert alert-danger" role="alert">
                 {{ closeError }}
+            </div>
+
+            <div v-if="certificateError" class="alert alert-danger" role="alert">
+                {{ certificateError }}
             </div>
 
             <!-- Saldo real de la cuenta -->
@@ -139,7 +150,9 @@ export default {
         return {
             movementFilter: 'ALL',
             closing: false,
-            closeError: ''
+            closeError: '',
+            generatingCertificate: false,
+            certificateError: ''
         }
     },
 
@@ -166,6 +179,43 @@ export default {
                     'No se ha podido cerrar la cuenta.'
             } finally {
                 this.closing = false
+            }
+        },
+
+        // Solicita el certificado firmado y lo descarga como un archivo JSON.
+        async downloadOwnershipCertificate() {
+            if (this.generatingCertificate) {
+                return
+            }
+
+            this.generatingCertificate = true
+            this.certificateError = ''
+
+            try {
+                const response = await api.get(
+                    `/accounts/${this.selectedAccount.id}/ownership-certificate`
+                )
+                const content = JSON.stringify(response.data, null, 2)
+                const file = new Blob([content], {
+                    type: 'application/json;charset=utf-8'
+                })
+                const downloadURL = URL.createObjectURL(file)
+                const link = document.createElement('a')
+                const normalizedIBAN = String(this.selectedAccount.iban)
+                    .replace(/[^a-zA-Z0-9]/g, '')
+
+                link.href = downloadURL
+                link.download = `certificado-titularidad-${normalizedIBAN}.json`
+                document.body.appendChild(link)
+                link.click()
+                link.remove()
+                URL.revokeObjectURL(downloadURL)
+            } catch (error) {
+                console.error('Error al generar el certificado:', error)
+                this.certificateError = error.response?.data?.error ||
+                    'No se ha podido generar el certificado de titularidad.'
+            } finally {
+                this.generatingCertificate = false
             }
         },
 
