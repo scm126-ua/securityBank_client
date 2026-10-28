@@ -13,7 +13,7 @@
                         </p>
                     </div>
 
-                    <div class="card border-0 shadow-sm">
+                    <div v-if="loginAttempts > 0" class="card border-0 shadow-sm">
                         <!-- INICIO DE SESIÓN -->
                         <template v-if="!registerMode">
                             <div class="card-header bg-white border-0 pt-4 px-4">
@@ -241,6 +241,9 @@
                             </div>
                         </template>
                     </div>
+                    <div class="card border-0 shadow-sm">
+                        <TooManyLoginAttemptsView></TooManyLoginAttemptsView>
+                    </div>
                 </div>
             </div>
         </div>
@@ -258,13 +261,11 @@ import {
     importServerSigningPublicKey,
     restorePrivateKeys,
     signChallenge,
-    verifyUserPublicKeysCertificate
 } from '../services/crypto'
 import { storePrivateKeys } from '../services/keyStore'
-
+import TooManyLoginAttemptsView from './TooManyLoginAttemptsView.vue';
 export default {
     name: 'LoginScreen',
-
     data() {
         return {
             registerMode: false,
@@ -277,9 +278,8 @@ export default {
             lastName: '',
             dni: '',
             acceptTerms: false,
-
             serverError: '',
-
+            loginAttempts: 3,
             errors: {
                 email: '',
                 password: '',
@@ -465,9 +465,18 @@ export default {
                 storePrivateKeys(privateKeys)
                 localStorage.setItem('token', response.data.token)
                 this.$emit('login-success', response.data)
+
             } catch (error) {
                 if (error.response?.status === 401) {
-                    this.serverError = 'Correo o contraseña incorrectos.'
+                    
+                    // Llamamos a backend para obtener el nº de intentos
+                    await api.get('/login/GetUserByEmail', {
+                        email: this.email
+                    }).then(response => {
+                        console.log(response.data);
+                    })
+
+                    this.serverError = `Correo o contraseña incorrectos. Te quedan ${this.loginAttempts} intentos`
                 } else {
                     this.serverError =
                         error.response?.data?.error ||
