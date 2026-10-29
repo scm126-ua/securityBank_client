@@ -26,6 +26,9 @@ import UserDocuments from './components/UserDocuments.vue';
 import api from './api/axios';
 import { clearSession } from './services/keyStore';
 
+// Tras 15 minutos sin actividad se cierra la sesión y se borran las claves de memoria.
+const inactivityTimeout = 15 * 60 * 1000
+const activityEvents = ['pointerdown', 'pointermove', 'keydown', 'wheel']
 
 export default {
 
@@ -52,14 +55,36 @@ export default {
     this.revokeSession()
   },
 
+  mounted() {
+    activityEvents.forEach((event) => {
+      window.addEventListener(event, this.resetInactivityTimer, { passive: true })
+    })
+  },
+
+  unmounted() {
+    clearTimeout(this.inactivityTimer)
+    activityEvents.forEach((event) => {
+      window.removeEventListener(event, this.resetInactivityTimer)
+    })
+  },
+
   methods: {
     // Revoca el token en el servidor y borra la cookie de sesión.
     revokeSession() {
       api.post('/logout').catch(() => {})
     },
 
+    // Reinicia la cuenta atrás de inactividad mientras haya una sesión abierta.
+    resetInactivityTimer() {
+      clearTimeout(this.inactivityTimer)
+      if (this.isAuthenticated) {
+        this.inactivityTimer = setTimeout(this.handleLogout, inactivityTimeout)
+      }
+    },
+
     // Cierra la sesión y elimina de memoria las claves privadas.
     handleLogout() {
+      clearTimeout(this.inactivityTimer)
       clearSession()
       this.revokeSession()
       this.selectedAccount = null
@@ -69,6 +94,7 @@ export default {
 
     handleLoginSuccess() {
       this.isAuthenticated = true;
+      this.resetInactivityTimer()
     },
 
     handleSelectAccount(account) {
