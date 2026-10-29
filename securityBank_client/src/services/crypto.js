@@ -4,9 +4,13 @@ const rsaAlgorithm = {
     hash: 'SHA-256'
 }
 const pbkdf2Iterations = 600000
+const privateKeyBundleVersion = 2
 const privateKeyBundleContext = new TextEncoder().encode(
-    'securitybank-private-key-bundle-v1'
+    'securitybank-private-key-bundle-v2'
 )
+const masterKeyContext = 'securitybank-master-key-v2:'
+const authKeyLabel = new TextEncoder().encode('securitybank-auth-key-v2')
+const privateKeysKeyLabel = new TextEncoder().encode('securitybank-private-keys-v2')
 const userKeyCertificateVersion = 'securitybank-user-keys-v1'
 
 // Convierte datos binarios a Base64 para poder transportarlos como texto.
@@ -82,31 +86,53 @@ function userKeyCertificatePayload(email, publicKey, signingPublicKey) {
     return payload
 }
 
-// Deriva una clave AES no exportable a partir de la contraseña y la sal.
-async function derivePrivateKeyEncryptionKey(password, salt) {
+// Deriva de la contraseña una clave maestra que nunca sale del navegador. El
+// correo normalizado actúa como sal para poder derivarla antes de autenticarse.
+export async function deriveMasterKey(email, password) {
     const passwordKey = await crypto.subtle.importKey(
         'raw',
         new TextEncoder().encode(password),
         'PBKDF2',
         false,
-        ['deriveKey']
+        ['deriveBits']
     )
-
-    return crypto.subtle.deriveKey(
+    const masterKey = await crypto.subtle.deriveBits(
         {
             name: 'PBKDF2',
             hash: 'SHA-256',
-            salt,
+            salt: new TextEncoder().encode(masterKeyContext + email.trim().toLowerCase()),
             iterations: pbkdf2Iterations
         },
         passwordKey,
-        {
-            name: 'AES-GCM',
-            length: 256
-        },
-        false,
-        ['encrypt', 'decrypt']
+        256
     )
+
+    return crypto.subtle.importKey(
+        'raw',
+        masterKey,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    )
+}
+
+// Obtiene la clave que se envía al servidor para autenticarse. Es independiente
+// de la que protege las claves privadas: conocerla no permite descifrarlas.
+export async function deriveAuthKey(masterKey) {
+    const authKey = await crypto.subtle.sign('HMAC', masterKey, authKeyLabel)
+
+    return arrayBufferToBase64(authKey)
+}
+
+// Deriva de la clave maestra la clave AES no exportable que protege las claves privadas.
+async function derivePrivateKeyEncryptionKey(masterKey, salt) {
+    const encryptionKey = await crypto.subtle.sign(
+        'HMAC',
+        masterKey,
+        new Uint8Array([...privateKeysKeyLabel, ...salt])
+    )
+
+    return crypto.subtle.importKey('raw', encryptionKey, 'AES-GCM', false, ['encrypt', 'decrypt'])
 }
 
 // Genera el par usado para cifrar y descifrar claves AES.
@@ -155,10 +181,10 @@ export async function exportPrivateKey(privateKey) {
     return arrayBufferToBase64(exportedKey)
 }
 
-// Protege las dos claves privadas con una clave derivada de la contraseña.
-export async function encryptPrivateKeys(keyPairs, password) {
-    if (!password) {
-        throw new Error('La contraseña es obligatoria para proteger las claves')
+// Protege las dos claves privadas con una clave derivada de la clave maestra.
+export async function encryptPrivateKeys(keyPairs, masterKey) {
+    if (!masterKey) {
+        throw new Error('La clave maestra es obligatoria para proteger las claves')
     }
 
     const privateKeys = {
@@ -168,7 +194,7 @@ export async function encryptPrivateKeys(keyPairs, password) {
     const plaintext = new TextEncoder().encode(JSON.stringify(privateKeys))
     const salt = randomBytes(16)
     const nonce = randomBytes(12)
-    const encryptionKey = await derivePrivateKeyEncryptionKey(password, salt)
+    const encryptionKey = await derivePrivateKeyEncryptionKey(masterKey, salt)
     const ciphertext = await crypto.subtle.encrypt(
         {
             name: 'AES-GCM',
@@ -180,9 +206,9 @@ export async function encryptPrivateKeys(keyPairs, password) {
     )
 
     return {
-        version: 1,
+        version: privateKeyBundleVersion,
         algorithm: 'AES-256-GCM',
-        kdf: 'PBKDF2-HMAC-SHA256',
+        kdf: 'PBKDF2-HMAC-SHA256+HMAC-SHA256',
         iterations: pbkdf2Iterations,
         salt: arrayBufferToBase64(salt),
         nonce: arrayBufferToBase64(nonce),
@@ -190,16 +216,16 @@ export async function encryptPrivateKeys(keyPairs, password) {
     }
 }
 
-// Recupera las claves privadas cuando la contraseña y el paquete son válidos.
-export async function decryptPrivateKeys(bundle, password) {
-    if (bundle?.version !== 1 || bundle?.iterations !== pbkdf2Iterations) {
+// Recupera las claves privadas cuando la clave maestra y el paquete son válidos.
+export async function decryptPrivateKeys(bundle, masterKey) {
+    if (bundle?.version !== privateKeyBundleVersion || bundle?.iterations !== pbkdf2Iterations) {
         throw new Error('El formato de las claves privadas no es compatible')
     }
 
     const salt = base64ToBytes(bundle.salt)
     const nonce = base64ToBytes(bundle.nonce)
     const ciphertext = base64ToBytes(bundle.ciphertext)
-    const encryptionKey = await derivePrivateKeyEncryptionKey(password, salt)
+    const encryptionKey = await derivePrivateKeyEncryptionKey(masterKey, salt)
     const plaintext = await crypto.subtle.decrypt(
         {
             name: 'AES-GCM',
@@ -270,8 +296,8 @@ export async function importSigningPrivateKey(encodedKey) {
 }
 
 // Descifra e importa las dos claves privadas como claves no exportables.
-export async function restorePrivateKeys(bundle, password) {
-    const encodedKeys = await decryptPrivateKeys(bundle, password)
+export async function restorePrivateKeys(bundle, masterKey) {
+    const encodedKeys = await decryptPrivateKeys(bundle, masterKey)
     const [encryption, signing] = await Promise.all([
         importEncryptionPrivateKey(encodedKeys.encryption),
         importSigningPrivateKey(encodedKeys.signing)

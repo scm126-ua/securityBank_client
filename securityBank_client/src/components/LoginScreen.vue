@@ -252,6 +252,8 @@
 <script>
 import api from '../api/axios'
 import {
+    deriveAuthKey,
+    deriveMasterKey,
     encryptPrivateKeys,
     exportPublicKey,
     generateUserKeyPairs,
@@ -437,13 +439,15 @@ export default {
                 const serverPublicKey = await importServerSigningPublicKey(
                     identityResponse.data
                 )
+                // La contraseña no sale del navegador: solo se envía la clave de autenticación.
+                const masterKey = await deriveMasterKey(this.email, this.password)
                 const challengeResponse = await api.post('/login/challenge', {
                     email: this.email,
-                    password: this.password
+                    auth_key: await deriveAuthKey(masterKey)
                 })
                 const privateKeys = await restorePrivateKeys(
                     challengeResponse.data.private_key_bundle,
-                    this.password
+                    masterKey
                 )
                 const signature = await signChallenge(
                     privateKeys.signing,
@@ -488,18 +492,22 @@ export default {
             this.loading = true
 
             try {
-                const keyPairs = await generateUserKeyPairs()
-                const [publicKey, signingPublicKey, privateKeyBundle] = await Promise.all([
+                const [keyPairs, masterKey] = await Promise.all([
+                    generateUserKeyPairs(),
+                    deriveMasterKey(this.email, this.password)
+                ])
+                const [publicKey, signingPublicKey, privateKeyBundle, authKey] = await Promise.all([
                     exportPublicKey(keyPairs.encryption.publicKey),
                     exportPublicKey(keyPairs.signing.publicKey),
-                    encryptPrivateKeys(keyPairs, this.password)
+                    encryptPrivateKeys(keyPairs, masterKey),
+                    deriveAuthKey(masterKey)
                 ])
 
                 const response = await api.post('/register', {
                     name: this.name,
                     surname: this.lastName,
                     email: this.email,
-                    password: this.password,
+                    auth_key: authKey,
                     dni: this.dni.trim().toUpperCase(),
                     public_key: publicKey,
                     signing_public_key: signingPublicKey,
