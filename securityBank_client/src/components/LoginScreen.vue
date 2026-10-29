@@ -3,7 +3,7 @@
     <div class=background>
         <div class="container py-5">
             <div class="row justify-content-center">
-                <div class="col-12 col-md-9 col-lg-6 col-xl-5">
+                <div class="col-12 col-lg-6 col-xl-5">
 
                     <div class="card align-items-center p-3 mb-4">
                         <div class="brand-icon mb-3">🔒</div>
@@ -13,7 +13,11 @@
                         </p>
                     </div>
 
-                    <div v-if="loginAttempts > 0" class="card border-0 shadow-sm">
+                    <div v-if="loginBlock">
+                        <TooManyLoginAttemptsView :initial-seconds="lockedUntil" @retry-login="retryLogin" />
+                    </div>
+
+                    <div v-else class="card border-0 shadow-sm">
                         <!-- INICIO DE SESIÓN -->
                         <template v-if="!registerMode">
                             <div class="card-header bg-white border-0 pt-4 px-4">
@@ -241,11 +245,9 @@
                             </div>
                         </template>
                     </div>
-                    <div class="card border-0 shadow-sm">
-                        <TooManyLoginAttemptsView></TooManyLoginAttemptsView>
-                    </div>
                 </div>
             </div>
+
         </div>
     </div>
 
@@ -270,7 +272,6 @@ export default {
         return {
             registerMode: false,
             loading: false,
-
             email: '',
             password: '',
             confirmPassword: '',
@@ -279,7 +280,7 @@ export default {
             dni: '',
             acceptTerms: false,
             serverError: '',
-            loginAttempts: 3,
+            lockedUntil: null,
             errors: {
                 email: '',
                 password: '',
@@ -292,6 +293,27 @@ export default {
         }
     },
 
+    components: {
+        TooManyLoginAttemptsView
+    },
+
+    mounted() {
+        const lockedUntil = localStorage.getItem('loginLockedUntil')
+
+        if (lockedUntil) {
+            const secondsRemaining = Math.ceil(
+                (new Date(lockedUntil).getTime() - Date.now()) / 1000
+            )
+
+            if (secondsRemaining > 0) {
+                this.lockedUntil = secondsRemaining
+                this.loginBlock = true
+            } else {
+                localStorage.removeItem('loginLockedUntil')
+            }
+        }
+    },
+
     methods: {
         clearErrors() {
             this.serverError = ''
@@ -299,6 +321,15 @@ export default {
             Object.keys(this.errors).forEach((key) => {
                 this.errors[key] = ''
             })
+        },
+
+        retryLogin() {
+            this.loginBlock = false
+            this.lockedUntil = 0
+            this.password = ''
+            this.serverError = ''
+
+            localStorage.removeItem('loginLockedUntil')
         },
 
         switchMode(register) {
@@ -425,30 +456,69 @@ export default {
             return valid
         },
 
+
         async logUser() {
             if (this.loading || !this.validateLogin()) {
                 return
             }
 
             this.loading = true
+            this.serverError = ''
 
             try {
+                // 1. Comprobar el bloqueo ANTES de autenticar
+                const statusResponse = await api.get('/getUserByEmail', {
+                    params: {
+                        email: this.email
+                    }
+                })
+
+                const user = statusResponse.data.user || statusResponse.data
+                const lockedUntil = user?.locked_until
+
+                if (lockedUntil) {
+                    const secondsRemaining = Math.ceil(
+                        (new Date(lockedUntil).getTime() - Date.now()) / 1000
+                    )
+
+                    if (secondsRemaining > 0) {
+                        this.lockedUntil = secondsRemaining
+                        this.loginBlock = true
+
+                        localStorage.setItem(
+                            'loginLockedUntil',
+                            user.locked_until
+                        )
+
+                        return
+                    }
+                }
+
+                // La cuenta no está bloqueada: continuar con el login
+                this.loginBlock = false
+                this.lockedUntil = 0
+
                 const identityResponse = await api.get('/server/public-key')
+
                 const serverPublicKey = await importServerSigningPublicKey(
                     identityResponse.data
                 )
+
                 const challengeResponse = await api.post('/login/challenge', {
                     email: this.email,
                     password: this.password
                 })
+
                 const privateKeys = await restorePrivateKeys(
                     challengeResponse.data.private_key_bundle,
                     this.password
                 )
+
                 const signature = await signChallenge(
                     privateKeys.signing,
                     challengeResponse.data.challenge
                 )
+
                 const response = await api.post('/login/verify', {
                     challenge_id: challengeResponse.data.challenge_id,
                     signature
@@ -458,9 +528,18 @@ export default {
                     serverPublicKey,
                     response.data.user
                 )
+
                 if (!certificateIsValid) {
-                    throw new Error('El certificado de las claves del usuario no es válido')
+                    throw new Error(
+                        'El certificado de las claves del usuario no es válido'
+                    )
                 }
+
+                // Quitamos el bloqueo si lo hubiera
+                localStorage.removeItem('loginLockedUntil')
+                localStorage.setItem('token', response.data.token)
+
+                this.$emit('login-success', response.data)
 
                 storePrivateKeys(privateKeys)
                 localStorage.setItem('token', response.data.token)
@@ -468,15 +547,30 @@ export default {
 
             } catch (error) {
                 if (error.response?.status === 401) {
-                    
-                    // Llamamos a backend para obtener el nº de intentos
-                    await api.get('/login/GetUserByEmail', {
-                        email: this.email
-                    }).then(response => {
-                        console.log(response.data);
-                    })
+                    this.serverError = 'Correo o contraseña incorrectos'
 
-                    this.serverError = `Correo o contraseña incorrectos. Te quedan ${this.loginAttempts} intentos`
+                    try {
+                        // Registrar el intento fallido
+                        const failedResponse = await api.post(
+                            '/addFailedLoginAttempt',
+                            { email: this.email }
+                        )
+
+                        const user = failedResponse.data.user || null
+
+                        if (user?.locked_until) {
+                            const secondsRemaining = Math.ceil(
+                                (new Date(user.locked_until).getTime() - Date.now()) / 1000
+                            )
+
+                            if (secondsRemaining > 0) {
+                                this.lockedUntil = secondsRemaining
+                                this.loginBlock = true
+                            }
+                        }
+                    } catch (failedAttemptError) {
+                        console.error('No se pudo registrar el intento fallido')
+                    }
                 } else {
                     this.serverError =
                         error.response?.data?.error ||
@@ -487,6 +581,7 @@ export default {
                 this.loading = false
             }
         },
+
 
         async registerUser() {
             if (this.loading || !this.validateRegistration()) {
@@ -523,6 +618,7 @@ export default {
                 this.confirmPassword = ''
                 this.serverError = 'Registro completado. Ya puedes iniciar sesión.'
             } catch (error) {
+                console.log(error);
                 this.serverError =
                     error.response?.data?.error ||
                     'No se ha podido completar el registro. Inténtalo de nuevo.'

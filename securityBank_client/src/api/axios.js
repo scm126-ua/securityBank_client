@@ -1,8 +1,9 @@
-
 import axios from 'axios'
 
+const HTTPS_PORT = import.meta.env.VITE_HTTPS_PORT || '8443'
+
 const api = axios.create({
-    baseURL: 'http://localhost:8080/api',
+    baseURL: `https://localhost:${HTTPS_PORT}/api`,
     timeout: 10000,
     headers: {
         'Content-Type': 'application/json',
