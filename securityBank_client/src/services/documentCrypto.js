@@ -37,6 +37,7 @@ const maxFileNameLength = 200
 const encryptionContext = 'securitybank-document-v1'
 const manifestContext = 'securitybank-document-manifest-v1'
 const keyCommitmentContext = 'securitybank-document-key-commitment-v1'
+const deleteRequestContext = 'securitybank-document-delete-v1'
 const documentIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 // Indica que un documento no ha superado alguna comprobación de integridad.
@@ -354,6 +355,24 @@ export async function encryptDocument(file, type, session) {
         rawKey.fill(0)
         padded.fill(0)
         content.fill(0)
+    }
+}
+
+// Firma la orden de borrado con la clave privada: el servidor no acepta solo la sesión.
+// Devuelve las cabeceras que acompañan a la petición.
+export async function signDeleteRequest(documentId, session) {
+    assertSession(session)
+
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const signature = await crypto.subtle.sign(
+        { name: 'RSA-PSS', saltLength: 32 },
+        session.privateKeys.signing,
+        lengthPrefixed([deleteRequestContext, documentId, timestamp])
+    )
+
+    return {
+        'X-Request-Timestamp': timestamp,
+        'X-Request-Signature': arrayBufferToBase64(signature)
     }
 }
 

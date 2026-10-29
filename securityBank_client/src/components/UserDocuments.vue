@@ -184,7 +184,8 @@ import {
     UPLOADABLE_DOCUMENT_TYPES,
     decryptDocumentMetadata,
     encryptDocument,
-    openDocument
+    openDocument,
+    signDeleteRequest
 } from '@/services/documentCrypto'
 
 // Los documentos de 10 MB viajan como ~14 MB en Base64.
@@ -395,7 +396,9 @@ export default {
             this.verification = null
 
             try {
-                await api.delete(`/documents/${item.summary.id}`)
+                await api.delete(`/documents/${item.summary.id}`, {
+                    headers: await signDeleteRequest(item.summary.id, this.session())
+                })
                 await this.fetchDocuments()
             } catch (error) {
                 this.actionError = this.requestErrorMessage(error, 'No se ha podido eliminar el documento.')
