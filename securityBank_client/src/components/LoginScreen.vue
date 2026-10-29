@@ -435,10 +435,14 @@ export default {
             this.loading = true
 
             try {
+                // Huella fijada al compilar o, si no hay, la vista en el primer acceso (TOFU).
                 const identityResponse = await api.get('/server/public-key')
                 const serverPublicKey = await importServerSigningPublicKey(
-                    identityResponse.data
+                    identityResponse.data,
+                    import.meta.env.VITE_SERVER_KEY_FINGERPRINT ||
+                        localStorage.getItem('serverKeyFingerprint')
                 )
+                localStorage.setItem('serverKeyFingerprint', identityResponse.data.fingerprint_sha256)
                 // La contraseña no sale del navegador: solo se envía la clave de autenticación.
                 const masterKey = await deriveMasterKey(this.email, this.password)
                 const challengeResponse = await api.post('/login/challenge', {

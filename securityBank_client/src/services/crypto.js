@@ -320,8 +320,9 @@ export async function signChallenge(signingPrivateKey, encodedChallenge) {
     return arrayBufferToBase64(signature)
 }
 
-// Importa y valida la identidad pública publicada por el servidor.
-export async function importServerSigningPublicKey(identity) {
+// Importa y valida la identidad pública publicada por el servidor. Si se indica
+// una huella de confianza, la clave recibida debe coincidir con ella.
+export async function importServerSigningPublicKey(identity, trustedFingerprint) {
     if (
         identity?.version !== 1 ||
         identity?.public_key_algorithm !== 'RSA-3072' ||
@@ -339,6 +340,9 @@ export async function importServerSigningPublicKey(identity) {
 
     if (encodedFingerprint !== identity.fingerprint_sha256) {
         throw new Error('La huella de la clave pública del servidor no coincide')
+    }
+    if (trustedFingerprint && encodedFingerprint !== trustedFingerprint) {
+        throw new Error('La identidad del servidor ha cambiado: no se continúa por seguridad')
     }
 
     const publicKey = await crypto.subtle.importKey(
