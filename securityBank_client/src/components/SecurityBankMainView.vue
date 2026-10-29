@@ -1,144 +1,181 @@
-```vue
 <template>
-    <div class="bank-page">
-        <!-- Navbar -->
-        <nav class="navbar navbar-expand-lg navbar-dark bank-navbar">
-            <div class="container">
-                <a class="navbar-brand fw-bold" href="#">
-                    <i class="bi bi-shield-lock-fill me-2"></i>
-                    SecurityBank
-                </a>
+    <section>
+        <button type="button" class="back-link" @click="$emit('back-to-accounts')">
+            <AppIcon name="arrow-left" />
+            Volver a mis cuentas
+        </button>
 
-                <div class="navbar-nav ms-auto">
-                    <a class="nav-link active" href="#">Inicio</a>
-                    <a class="nav-link" href="#movimientos">Movimientos</a>
-                    <a class="nav-link" href="#">Mi perfil</a>
-                </div>
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Detalle de la cuenta</h1>
+                <p class="page-subtitle">Consulta el saldo, los datos de la cuenta y las operaciones disponibles.</p>
             </div>
-        </nav>
+        </div>
 
-        <!-- Contenido -->
-        <div class="container py-5">
-            <h2 class="fw-bold mb-2">Bienvenido a SecurityBank</h2>
-            <p class="text-secondary mb-4">
-                Consulta el estado de tu cuenta bancaria.
-            </p>
+        <div v-if="closeError" class="alert alert-danger d-flex gap-2" role="alert">
+            <AppIcon name="alert-circle" />
+            <span>{{ closeError }}</span>
+        </div>
 
-            <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
-                <button type="button" class="btn btn-outline-secondary" @click="$emit('back-to-accounts')">
-                    &larr; Volver a mis cuentas
-                </button>
+        <div v-if="certificateError" class="alert alert-danger d-flex gap-2" role="alert">
+            <AppIcon name="alert-circle" />
+            <span>{{ certificateError }}</span>
+        </div>
 
-                <button type="button" class="btn btn-outline-primary" :disabled="generatingCertificate"
-                    @click="downloadOwnershipCertificate">
-                    <span v-if="generatingCertificate" class="spinner-border spinner-border-sm me-2"
-                        aria-hidden="true"></span>
-                    {{ generatingCertificate ? 'Generando...' : 'Descargar certificado de titularidad' }}
-                </button>
+        <div v-if="certificateDownloaded" class="alert alert-success d-flex gap-2" role="status">
+            <AppIcon name="check-circle" />
+            <span>Se ha descargado el certificado de titularidad firmado por SecurityBank.</span>
+        </div>
 
-                <button v-if="selectedAccount.status === 'ACTIVE'" type="button" class="btn btn-outline-danger"
-                    :disabled="closing" @click="closeAccount">
-                    <span v-if="closing" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                    {{ closing ? 'Cerrando...' : 'Cerrar cuenta' }}
-                </button>
-            </div>
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <!-- Saldo y datos de la cuenta -->
+                <div class="balance-card mb-4">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                        <div>
+                            <span class="balance-label">Saldo disponible</span>
+                            <p class="balance-amount amount">{{ formatCurrency(selectedAccount.balance) }}</p>
+                        </div>
 
-            <div v-if="closeError" class="alert alert-danger" role="alert">
-                {{ closeError }}
-            </div>
+                        <span class="status-badge"
+                            :class="selectedAccount.status === 'ACTIVE' ? 'status-active' : 'status-closed'">
+                            {{ accountStatusLabel(selectedAccount.status) }}
+                        </span>
+                    </div>
 
-            <div v-if="certificateError" class="alert alert-danger" role="alert">
-                {{ certificateError }}
-            </div>
-
-            <!-- Saldo real de la cuenta -->
-            <div class="card balance-card mb-4">
-                <div class="card-body p-4">
-                    <p class="mb-2">Saldo disponible</p>
-
-                    <h1 class="fw-bold">
-                        {{ formatBalance(selectedAccount.balance) }}
-                    </h1>
-
-                    <p class="mb-2">
-                        <i class="bi bi-credit-card me-2"></i>
-                        Cuenta {{ selectedAccount.id }}
-                    </p>
-
-                    <p class="mb-2">
-                        <i class="bi bi-bank me-2"></i>
-                        {{ selectedAccount.iban }}
-                    </p>
-
-                    <span class="badge" :class="selectedAccount.status === 'ACTIVE'
-                        ? 'text-bg-success'
-                        : 'text-bg-secondary'">
-                        {{ selectedAccount.status }}
-                    </span>
-
-                    <p class="mt-3 mb-0 small">
-                        <i class="bi bi-calendar3 me-2"></i>
-                        Creada el {{ formatDate(selectedAccount.created_at) }}
-                    </p>
-                </div>
-            </div>
-
-            <!-- Acciones de movimientos -->
-            <div class="row g-3 mb-5" id="movimientos">
-                <div class="col-12">
-                    <h3 class="fw-bold">Movimientos</h3>
-                    <p class="text-secondary">
-                        Consulta las operaciones de esta cuenta.
-                    </p>
+                    <dl class="account-details">
+                        <div class="detail detail-iban">
+                            <dt>IBAN</dt>
+                            <dd>
+                                <span class="iban">{{ formatIBAN(selectedAccount.iban) }}</span>
+                                <button type="button" class="copy-button" @click="copyIBAN">
+                                    <AppIcon :name="ibanCopied ? 'check' : 'copy'" />
+                                    {{ ibanCopied ? 'Copiado' : 'Copiar' }}
+                                </button>
+                            </dd>
+                        </div>
+                        <div class="detail">
+                            <dt>Fecha de apertura</dt>
+                            <dd>{{ formatDate(selectedAccount.created_at) }}</dd>
+                        </div>
+                        <div class="detail">
+                            <dt>Divisa</dt>
+                            <dd>Euro (EUR)</dd>
+                        </div>
+                        <div class="detail">
+                            <dt>Referencia</dt>
+                            <dd>{{ selectedAccount.id }}</dd>
+                        </div>
+                    </dl>
                 </div>
 
-                <div class="col-md-4">
-                    <button class="btn btn-primary w-100 py-3" @click="movementFilter = 'ALL'">
-                        <i class="bi bi-arrow-left-right me-2"></i>
-                        Todos
-                    </button>
-                </div>
+                <!-- Movimientos -->
+                <div class="panel" id="movimientos">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Movimientos</h2>
 
-                <div class="col-md-4">
-                    <button class="btn btn-outline-primary w-100 py-3" @click="movementFilter = 'INCOME'">
-                        <i class="bi bi-graph-up-arrow me-2"></i>
-                        Ingresos
-                    </button>
-                </div>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Filtrar movimientos">
+                            <button v-for="filter in movementFilters" :key="filter.value" type="button" class="btn"
+                                :class="movementFilter === filter.value ? 'btn-primary' : 'btn-outline-primary'"
+                                :aria-pressed="movementFilter === filter.value" @click="movementFilter = filter.value">
+                                {{ filter.label }}
+                            </button>
+                        </div>
+                    </div>
 
-                <div class="col-md-4">
-                    <button class="btn btn-outline-primary w-100 py-3" @click="movementFilter = 'EXPENSE'">
-                        <i class="bi bi-graph-down-arrow me-2"></i>
-                        Gastos
-                    </button>
+                    <div class="empty-state">
+                        <span class="empty-icon">
+                            <AppIcon name="transfer" />
+                        </span>
+                        <h3 class="empty-title">No hay movimientos que mostrar</h3>
+                        <p class="empty-text">Las operaciones de esta cuenta aparecerán aquí.</p>
+                    </div>
                 </div>
             </div>
 
-            <!-- Movimientos pendientes de conectar con la API -->
-            <div class="card">
-                <div class="card-header bg-white py-3">
-                    <h5 class="mb-0 fw-bold">Últimos movimientos</h5>
-                </div>
+            <!-- Operaciones -->
+            <div class="col-lg-4">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Operaciones</h2>
+                    </div>
 
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-receipt empty-icon"></i>
+                    <div class="operation">
+                        <span class="operation-icon">
+                            <AppIcon name="file-check" />
+                        </span>
+                        <div>
+                            <h3 class="operation-title">Certificado de titularidad</h3>
+                            <p class="operation-text">
+                                Documento firmado digitalmente por el banco que acredita que eres titular de
+                                esta cuenta.
+                            </p>
+                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                :disabled="generatingCertificate" @click="downloadOwnershipCertificate">
+                                <span v-if="generatingCertificate" class="spinner-border spinner-border-sm me-2"
+                                    aria-hidden="true"></span>
+                                <AppIcon v-else name="download" class="me-1" />
+                                {{ generatingCertificate ? 'Generando...' : 'Descargar certificado' }}
+                            </button>
+                        </div>
+                    </div>
 
-                    <h5 class="mt-3">Movimientos no disponibles</h5>
+                    <div v-if="selectedAccount.status === 'ACTIVE'" class="operation">
+                        <span class="operation-icon operation-icon-danger">
+                            <AppIcon name="x-circle" />
+                        </span>
+                        <div>
+                            <h3 class="operation-title">Cerrar cuenta</h3>
+                            <p class="operation-text">
+                                {{ hasBalance
+                                    ? 'Para cerrar la cuenta, su saldo debe ser 0,00 €.'
+                                    : 'La cuenta se cerrará de forma permanente y no admitirá nuevas operaciones.' }}
+                            </p>
+                            <button type="button" class="btn btn-outline-danger btn-sm"
+                                :disabled="closing || hasBalance" @click="confirmingClose = true">
+                                <span v-if="closing" class="spinner-border spinner-border-sm me-2"
+                                    aria-hidden="true"></span>
+                                {{ closing ? 'Cerrando...' : 'Cerrar cuenta' }}
+                            </button>
+                        </div>
+                    </div>
 
-                    <p class="text-secondary mb-0">
-                        Todavía no se han conectado los movimientos de esta cuenta
-                        con el backend.
-                    </p>
+                    <div v-else class="operation">
+                        <span class="operation-icon">
+                            <AppIcon name="info" />
+                        </span>
+                        <div>
+                            <h3 class="operation-title">Cuenta cerrada</h3>
+                            <p class="operation-text mb-0">Esta cuenta está cerrada y no admite nuevas operaciones.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+
+        <ConfirmDialog v-if="confirmingClose" title="¿Cerrar esta cuenta?" confirm-label="Cerrar cuenta"
+            @confirm="closeAccount" @cancel="confirmingClose = false">
+            Vas a cerrar la cuenta <strong class="text-nowrap">{{ formatIBAN(selectedAccount.iban) }}</strong>.
+            El cierre es permanente: la cuenta no podrá volver a utilizarse.
+        </ConfirmDialog>
+    </section>
 </template>
 
 <script>
 import api from '@/api/axios'
+import { accountStatusLabel, formatCurrency, formatDate, formatIBAN } from '@/utils/format'
+import AppIcon from './AppIcon.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
+
+const movementFilters = [
+    { value: 'ALL', label: 'Todos' },
+    { value: 'INCOME', label: 'Ingresos' },
+    { value: 'EXPENSE', label: 'Gastos' }
+]
 
 export default {
+    components: { AppIcon, ConfirmDialog },
+
     props: {
         selectedAccount: {
             type: Object,
@@ -146,24 +183,40 @@ export default {
         }
     },
 
+    emits: ['back-to-accounts', 'account-closed'],
+
     data() {
         return {
+            movementFilters,
             movementFilter: 'ALL',
+            confirmingClose: false,
             closing: false,
             closeError: '',
             generatingCertificate: false,
-            certificateError: ''
+            certificateError: '',
+            certificateDownloaded: false,
+            ibanCopied: false
+        }
+    },
+
+    computed: {
+        // El servidor solo permite cerrar cuentas sin saldo.
+        hasBalance() {
+            return Number(this.selectedAccount.balance) !== 0
         }
     },
 
     methods: {
-        // Solicita confirmación y cierra la cuenta seleccionada.
-        async closeAccount() {
-            const confirmed = window.confirm(
-                'La cuenta se cerrará de forma permanente. ¿Deseas continuar?'
-            )
+        accountStatusLabel,
+        formatCurrency,
+        formatDate,
+        formatIBAN,
 
-            if (!confirmed || this.closing) {
+        // Cierra la cuenta seleccionada una vez confirmada la acción.
+        async closeAccount() {
+            this.confirmingClose = false
+
+            if (this.closing) {
                 return
             }
 
@@ -182,6 +235,17 @@ export default {
             }
         },
 
+        // Copia el IBAN sin espacios al portapapeles.
+        async copyIBAN() {
+            try {
+                await navigator.clipboard.writeText(String(this.selectedAccount.iban).replace(/\s/g, ''))
+                this.ibanCopied = true
+                setTimeout(() => (this.ibanCopied = false), 2000)
+            } catch (error) {
+                console.error('No se ha podido copiar el IBAN:', error)
+            }
+        },
+
         // Solicita el certificado firmado y lo descarga como un archivo JSON.
         async downloadOwnershipCertificate() {
             if (this.generatingCertificate) {
@@ -190,6 +254,7 @@ export default {
 
             this.generatingCertificate = true
             this.certificateError = ''
+            this.certificateDownloaded = false
 
             try {
                 const response = await api.get(
@@ -210,6 +275,7 @@ export default {
                 link.click()
                 link.remove()
                 URL.revokeObjectURL(downloadURL)
+                this.certificateDownloaded = true
             } catch (error) {
                 console.error('Error al generar el certificado:', error)
                 this.certificateError = error.response?.data?.error ||
@@ -217,98 +283,139 @@ export default {
             } finally {
                 this.generatingCertificate = false
             }
-        },
-
-        formatBalance(balance) {
-            const amount = Number(balance)
-
-            if (!Number.isFinite(amount)) {
-                return '—'
-            }
-
-            return amount.toLocaleString('es-ES', {
-                style: 'currency',
-                currency: 'EUR'
-            })
-        },
-
-        formatDate(date) {
-            if (!date) {
-                return 'No disponible'
-            }
-
-            const parsedDate = new Date(date)
-
-            if (Number.isNaN(parsedDate.getTime())) {
-                return 'No disponible'
-            }
-
-            return parsedDate.toLocaleDateString('es-ES', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric'
-            })
         }
     }
 }
 </script>
 
 <style scoped>
-.bank-page {
-    min-height: 100vh;
-    background-color: #f4f7fb;
-}
-
-.bank-navbar {
-    background-color: #163b65;
-}
-
-.navbar-brand {
-    font-size: 1.3rem;
-}
-
+/* Saldo y datos de la cuenta */
 .balance-card {
-    background: linear-gradient(135deg, #163b65, #2878c8);
-    color: white;
-    border: none;
-    border-radius: 16px;
+    padding: 1.75rem;
+    color: #ffffff;
+    border-radius: var(--sb-radius);
+    background:
+        radial-gradient(circle at 90% 0%, rgb(31 95 168 / 35%), transparent 45%),
+        linear-gradient(135deg, var(--sb-navy-900), var(--sb-navy-700));
+    box-shadow: var(--sb-shadow);
 }
 
-.card {
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
+.balance-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgb(255 255 255 / 70%);
 }
 
-.empty-icon {
-    font-size: 3rem;
-    color: #94a3b8;
+.balance-amount {
+    margin: 0.25rem 0 0;
+    font-size: 2.5rem;
+    font-weight: 600;
+    line-height: 1.2;
 }
 
-.btn {
-    border-radius: 10px;
+.balance-card .status-badge {
+    color: #ffffff;
+    background-color: rgb(255 255 255 / 14%);
+}
+
+.balance-card .status-active::before {
+    background-color: #5fd39a;
+}
+
+.account-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 1rem 1.5rem;
+    margin: 1.75rem 0 0;
+    padding-top: 1.25rem;
+    border-top: 1px solid rgb(255 255 255 / 18%);
+}
+
+.detail-iban {
+    grid-column: 1 / -1;
+}
+
+.detail dt {
+    margin-bottom: 0.125rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgb(255 255 255 / 60%);
+}
+
+.detail dd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0;
     font-weight: 500;
 }
 
-.btn-primary {
-    background-color: #163b65;
-    border-color: #163b65;
+.iban {
+    font-size: 1.125rem;
+    letter-spacing: 0.04em;
+    overflow-wrap: anywhere;
 }
 
-.btn-primary:hover {
-    background-color: #0f2d4d;
-    border-color: #0f2d4d;
+.copy-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid rgb(255 255 255 / 30%);
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    color: #ffffff;
+    background: none;
 }
 
-.btn-outline-primary {
-    color: #163b65;
-    border-color: #163b65;
+.copy-button:hover {
+    background-color: rgb(255 255 255 / 10%);
 }
 
-.btn-outline-primary:hover {
-    background-color: #163b65;
-    border-color: #163b65;
-    color: white;
+/* Operaciones */
+.operation {
+    display: flex;
+    gap: 1rem;
+    padding: 1.25rem;
+}
+
+.operation + .operation {
+    border-top: 1px solid var(--sb-border);
+}
+
+.operation-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.5rem;
+    font-size: 1.125rem;
+    color: var(--sb-navy-800);
+    background-color: #e8eef5;
+}
+
+.operation-icon-danger {
+    color: var(--sb-danger);
+    background-color: var(--sb-danger-bg);
+}
+
+.operation-title {
+    margin-bottom: 0.25rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--sb-navy-900);
+}
+
+.operation-text {
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--sb-muted);
 }
 </style>
-```
