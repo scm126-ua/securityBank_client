@@ -37,7 +37,7 @@
     </header>
 
     <main class="container app-main">
-      <UserDocuments v-if="showDocuments" @back="openAccounts" @session-expired="handleLogout('expired')" />
+      <UserDocuments v-if="showDocuments" @session-expired="handleLogout('expired')" />
 
       <UserAccounts v-else-if="!selectedAccount" @select-account="handleSelectAccount" />
 
