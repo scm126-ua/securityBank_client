@@ -21,10 +21,10 @@
                 <form class="row g-3 align-items-end" @submit.prevent="uploadDocument">
                     <div class="col-12 col-lg-6">
                         <label for="documentFile" class="form-label fw-semibold">
-                            Archivo (máximo 10 MB)
+                            Archivo PDF, PNG, JPEG o JSON (máximo 10 MB)
                         </label>
                         <input id="documentFile" ref="fileInput" type="file" class="form-control"
-                            :disabled="uploading" @change="selectFile" />
+                            accept=".pdf,.png,.jpg,.jpeg,.json" :disabled="uploading" @change="selectFile" />
                     </div>
 
                     <div class="col-12 col-md-6 col-lg-3">

@@ -40,6 +40,15 @@ const keyCommitmentContext = 'securitybank-document-key-commitment-v1'
 const deleteRequestContext = 'securitybank-document-delete-v1'
 const documentIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
+// Tipos admitidos, reconocidos por los primeros bytes del contenido y no por la
+// extensión. El servidor no puede comprobarlo porque solo recibe datos cifrados.
+const allowedFileTypes = [
+    { mime: 'application/pdf', signature: [0x25, 0x50, 0x44, 0x46, 0x2d] },
+    { mime: 'image/png', signature: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+    { mime: 'image/jpeg', signature: [0xff, 0xd8, 0xff] },
+    { mime: 'application/json', signature: [0x7b] }
+]
+
 // Indica que un documento no ha superado alguna comprobación de integridad.
 export class DocumentIntegrityError extends Error {
     constructor(message) {
@@ -155,6 +164,13 @@ export function sanitizeFileName(name) {
     const limited = Array.from(cleaned).slice(0, maxFileNameLength).join('')
 
     return limited || 'documento'
+}
+
+// Identifica el tipo real del archivo por su firma inicial (magic bytes).
+function detectFileType(content) {
+    return allowedFileTypes.find(({ signature }) => (
+        signature.every((byte, index) => content[index] === byte)
+    ))?.mime
 }
 
 // Acepta solo tipos MIME con formato tipo/subtipo.
@@ -282,6 +298,11 @@ export async function encryptDocument(file, type, session) {
     const id = crypto.randomUUID()
     const ownerId = identity.user.id
     const content = new Uint8Array(await file.arrayBuffer())
+    const mime = detectFileType(content)
+    if (!mime) {
+        throw new Error('Tipo de archivo no permitido: solo PDF, PNG, JPEG o JSON')
+    }
+
     const padded = new Uint8Array(paddedDocumentSize(content.length))
     padded.set(content)
 
@@ -289,7 +310,7 @@ export async function encryptDocument(file, type, session) {
     const metadata = encodeMetadata({
         v: 1,
         name: sanitizeFileName(file.name),
-        mime: sanitizeMimeType(file.type),
+        mime,
         size: content.length,
         sha256: fingerprint
     })
