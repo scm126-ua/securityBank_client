@@ -472,7 +472,6 @@ export default {
 
                 storePrivateKeys(privateKeys)
                 storeIdentity(response.data.user, serverPublicKey)
-                localStorage.setItem('token', response.data.token)
                 this.$emit('login-success', response.data)
             } catch (error) {
                 if (error.response?.status === 401) {

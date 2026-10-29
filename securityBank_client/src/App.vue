@@ -23,6 +23,7 @@ import LoginScreen from './components/LoginScreen.vue';
 import SecurityBankMainView from './components/SecurityBankMainView.vue';
 import UserAccounts from './components/UserAccounts.vue';
 import UserDocuments from './components/UserDocuments.vue';
+import api from './api/axios';
 import { clearSession } from './services/keyStore';
 
 
@@ -45,17 +46,22 @@ export default {
     }
   },
 
-  // Las claves privadas solo viven en memoria: tras recargar la página, el token
-  // de la sesión anterior ya no sirve para descifrar nada y se descarta.
+  // Las claves privadas solo viven en memoria: tras recargar la página, la sesión
+  // anterior ya no sirve para descifrar nada y se revoca en el servidor.
   created() {
-    localStorage.removeItem('token')
+    this.revokeSession()
   },
 
   methods: {
-    // Cierra la sesión y elimina de memoria las claves privadas y el token.
+    // Revoca el token en el servidor y borra la cookie de sesión.
+    revokeSession() {
+      api.post('/logout').catch(() => {})
+    },
+
+    // Cierra la sesión y elimina de memoria las claves privadas.
     handleLogout() {
       clearSession()
-      localStorage.removeItem('token')
+      this.revokeSession()
       this.selectedAccount = null
       this.showDocuments = false
       this.isAuthenticated = false
