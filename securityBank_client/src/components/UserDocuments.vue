@@ -209,7 +209,7 @@
                         <tr>
                             <th scope="col">Documento</th>
                             <th scope="col" class="d-none d-md-table-cell">Tipo</th>
-                            <th scope="col" class="d-none d-lg-table-cell">Tamaño</th>
+                            <th scope="col" class="d-none d-md-table-cell">Tamaño</th>
                             <th scope="col" class="d-none d-md-table-cell">Fecha de subida</th>
                             <th scope="col" class="text-end">
                                 <span class="visually-hidden">Acciones</span>
@@ -230,13 +230,14 @@
                                         <span v-else class="document-name text-danger">
                                             No verificable: {{ item.error }}
                                         </span>
+                                        <!-- En móvil, los datos de las columnas ocultas -->
                                         <span class="document-meta d-md-none">
-                                            {{ typeLabel(item.summary.type) }} ·
-                                            {{ formatDate(item.summary.created_at) }}
+                                            {{ typeLabel(item.summary.type) }}
+                                            <template v-if="item.summary.permission !== 'OWNER'">· Compartido</template>
+                                            · {{ item.metadata ? formatSize(item.metadata.size) : '—' }}
+                                            · {{ formatDate(item.summary.created_at) }}
                                         </span>
-                                        <span class="document-meta document-id d-none d-md-block">
-                                            {{ item.summary.id }}
-                                        </span>
+                                        <span class="document-meta document-id">{{ item.summary.id }}</span>
                                     </div>
                                 </div>
                             </td>
@@ -246,7 +247,7 @@
                                     Compartido
                                 </span>
                             </td>
-                            <td class="d-none d-lg-table-cell text-nowrap amount">
+                            <td class="d-none d-md-table-cell text-nowrap amount">
                                 {{ item.metadata ? formatSize(item.metadata.size) : '—' }}
                             </td>
                             <td class="d-none d-md-table-cell text-nowrap">
@@ -826,7 +827,7 @@ export default {
     margin-left: 0.375rem;
 }
 
-@media (min-width: 576px) {
+@media (min-width: 992px) {
     .action-label {
         display: inline;
     }
