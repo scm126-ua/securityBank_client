@@ -298,20 +298,8 @@ export default {
     },
 
     mounted() {
-        const lockedUntil = localStorage.getItem('loginLockedUntil')
-
-        if (lockedUntil) {
-            const secondsRemaining = Math.ceil(
-                (new Date(lockedUntil).getTime() - Date.now()) / 1000
-            )
-
-            if (secondsRemaining > 0) {
-                this.lockedUntil = secondsRemaining
-                this.loginBlock = true
-            } else {
-                localStorage.removeItem('loginLockedUntil')
-            }
-        }
+        // El bloqueo se gestiona desde el backend.
+        // No se persiste en localStorage.
     },
 
     methods: {
@@ -328,8 +316,6 @@ export default {
             this.lockedUntil = 0
             this.password = ''
             this.serverError = ''
-
-            localStorage.removeItem('loginLockedUntil')
         },
 
         switchMode(register) {
@@ -466,38 +452,6 @@ export default {
             this.serverError = ''
 
             try {
-                // 1. Comprobar el bloqueo ANTES de autenticar
-                const statusResponse = await api.get('/getUserByEmail', {
-                    params: {
-                        email: this.email
-                    }
-                })
-
-                const user = statusResponse.data.user || statusResponse.data
-                const lockedUntil = user?.locked_until
-
-                if (lockedUntil) {
-                    const secondsRemaining = Math.ceil(
-                        (new Date(lockedUntil).getTime() - Date.now()) / 1000
-                    )
-
-                    if (secondsRemaining > 0) {
-                        this.lockedUntil = secondsRemaining
-                        this.loginBlock = true
-
-                        localStorage.setItem(
-                            'loginLockedUntil',
-                            user.locked_until
-                        )
-
-                        return
-                    }
-                }
-
-                // La cuenta no está bloqueada: continuar con el login
-                this.loginBlock = false
-                this.lockedUntil = 0
-
                 const identityResponse = await api.get('/server/public-key')
 
                 const serverPublicKey = await importServerSigningPublicKey(
@@ -535,45 +489,25 @@ export default {
                     )
                 }
 
-                // Quitamos el bloqueo si lo hubiera
-                localStorage.removeItem('loginLockedUntil')
                 localStorage.setItem('token', response.data.token)
 
                 this.$emit('login-success', response.data)
 
                 storePrivateKeys(privateKeys)
-                localStorage.setItem('token', response.data.token)
-                this.$emit('login-success', response.data)
 
             } catch (error) {
-                if (error.response?.status === 401) {
+                const status = error.response?.status
+                const data = error.response?.data
+
+                if (status === 423 && data?.retry_after_seconds > 0) {
+                    // El backend ha bloqueado la cuenta
+                    this.lockedUntil = data.retry_after_seconds
+                    this.loginBlock = true
+                } else if (status === 401) {
                     this.serverError = 'Correo o contraseña incorrectos'
-
-                    try {
-                        // Registrar el intento fallido
-                        const failedResponse = await api.post(
-                            '/addFailedLoginAttempt',
-                            { email: this.email }
-                        )
-
-                        const user = failedResponse.data.user || null
-
-                        if (user?.locked_until) {
-                            const secondsRemaining = Math.ceil(
-                                (new Date(user.locked_until).getTime() - Date.now()) / 1000
-                            )
-
-                            if (secondsRemaining > 0) {
-                                this.lockedUntil = secondsRemaining
-                                this.loginBlock = true
-                            }
-                        }
-                    } catch (failedAttemptError) {
-                        console.error('No se pudo registrar el intento fallido')
-                    }
                 } else {
                     this.serverError =
-                        error.response?.data?.error ||
+                        data?.error ||
                         error.message ||
                         'No se ha podido iniciar sesión. Inténtalo de nuevo.'
                 }
