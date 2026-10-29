@@ -10,25 +10,33 @@ const privateKeyBundleContext = new TextEncoder().encode(
 const userKeyCertificateVersion = 'securitybank-user-keys-v1'
 
 // Convierte datos binarios a Base64 para poder transportarlos como texto.
-function arrayBufferToBase64(buffer) {
+// Procesa bloques para que documentos de varios MB no sean lentos.
+export function arrayBufferToBase64(buffer) {
     const bytes = new Uint8Array(buffer)
+    const chunkSize = 0x8000
     let binary = ''
 
-    bytes.forEach((byte) => {
-        binary += String.fromCharCode(byte)
-    })
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+    }
 
     return btoa(binary)
 }
 
 // Convierte texto en Base64 a los datos binarios originales.
-function base64ToBytes(value) {
+export function base64ToBytes(value) {
     const binary = atob(value)
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const bytes = new Uint8Array(binary.length)
+
+    for (let index = 0; index < binary.length; index++) {
+        bytes[index] = binary.charCodeAt(index)
+    }
+
+    return bytes
 }
 
 // Obtiene bytes aleatorios usando el generador seguro del navegador.
-function randomBytes(length) {
+export function randomBytes(length) {
     return crypto.getRandomValues(new Uint8Array(length))
 }
 
@@ -233,6 +241,20 @@ export async function importEncryptionPublicKey(encodedKey) {
     )
 }
 
+// Importa la clave pública que verifica las firmas de un usuario.
+export async function importSigningPublicKey(encodedKey) {
+    return crypto.subtle.importKey(
+        'spki',
+        base64ToBytes(encodedKey),
+        {
+            name: 'RSA-PSS',
+            hash: 'SHA-256'
+        },
+        false,
+        ['verify']
+    )
+}
+
 // Importa la clave privada destinada a firmar desafíos de autenticación.
 export async function importSigningPrivateKey(encodedKey) {
     return crypto.subtle.importKey(
@@ -351,14 +373,26 @@ export async function generateDataEncryptionKey() {
     )
 }
 
-// Cifra datos con AES-GCM y un nonce aleatorio de 12 bytes.
-export async function encryptData(encryptionKey, data) {
+// Prepara los parámetros de AES-GCM con datos adicionales autenticados opcionales.
+function aesGcmParameters(nonce, additionalData) {
+    const parameters = {
+        name: 'AES-GCM',
+        iv: nonce
+    }
+
+    if (additionalData !== undefined) {
+        parameters.additionalData = normalizeData(additionalData)
+    }
+
+    return parameters
+}
+
+// Cifra datos con AES-GCM y un nonce aleatorio de 12 bytes. Los datos
+// adicionales (AAD) no se cifran, pero quedan protegidos por el tag GCM.
+export async function encryptData(encryptionKey, data, additionalData) {
     const nonce = randomBytes(12)
     const ciphertext = await crypto.subtle.encrypt(
-        {
-            name: 'AES-GCM',
-            iv: nonce
-        },
+        aesGcmParameters(nonce, additionalData),
         encryptionKey,
         normalizeData(data)
     )
@@ -371,7 +405,7 @@ export async function encryptData(encryptionKey, data) {
 }
 
 // Descifra y verifica la integridad de datos protegidos con AES-GCM.
-export async function decryptData(encryptionKey, encryptedData) {
+export async function decryptData(encryptionKey, encryptedData, additionalData) {
     const nonce = base64ToBytes(encryptedData?.nonce)
     const ciphertext = base64ToBytes(encryptedData?.ciphertext)
 
@@ -384,10 +418,7 @@ export async function decryptData(encryptionKey, encryptedData) {
     }
 
     const plaintext = await crypto.subtle.decrypt(
-        {
-            name: 'AES-GCM',
-            iv: nonce
-        },
+        aesGcmParameters(nonce, additionalData),
         encryptionKey,
         ciphertext
     )

@@ -17,6 +17,14 @@
                     <span v-if="creating" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                     {{ creating ? 'Creando...' : 'Nueva cuenta' }}
                 </button>
+
+                <button type="button" class="btn btn-outline-primary" @click="$emit('open-documents')">
+                    Mis documentos
+                </button>
+
+                <button type="button" class="btn btn-outline-secondary" @click="$emit('logout')">
+                    Cerrar sesión
+                </button>
             </div>
         </div>
 

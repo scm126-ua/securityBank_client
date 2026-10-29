@@ -260,7 +260,7 @@ import {
     signChallenge,
     verifyUserPublicKeysCertificate
 } from '../services/crypto'
-import { storePrivateKeys } from '../services/keyStore'
+import { storeIdentity, storePrivateKeys } from '../services/keyStore'
 
 export default {
     name: 'LoginScreen',
@@ -463,6 +463,7 @@ export default {
                 }
 
                 storePrivateKeys(privateKeys)
+                storeIdentity(response.data.user, serverPublicKey)
                 localStorage.setItem('token', response.data.token)
                 this.$emit('login-success', response.data)
             } catch (error) {
