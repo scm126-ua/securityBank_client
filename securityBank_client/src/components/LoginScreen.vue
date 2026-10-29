@@ -267,7 +267,7 @@ import {
     signChallenge,
 } from '../services/crypto'
 import { storeIdentity, storePrivateKeys } from '../services/keyStore'
-
+import TooManyLoginAttemptsView from './TooManyLoginAttemptsView.vue';
 export default {
     name: 'LoginScreen',
     data() {
