@@ -257,6 +257,8 @@
 <script>
 import api from '../api/axios'
 import {
+    deriveAuthKey,
+    deriveMasterKey,
     encryptPrivateKeys,
     exportPublicKey,
     generateUserKeyPairs,
@@ -264,8 +266,8 @@ import {
     restorePrivateKeys,
     signChallenge,
 } from '../services/crypto'
-import { storePrivateKeys } from '../services/keyStore'
-import TooManyLoginAttemptsView from './TooManyLoginAttemptsView.vue';
+import { storeIdentity, storePrivateKeys } from '../services/keyStore'
+
 export default {
     name: 'LoginScreen',
     data() {
@@ -452,20 +454,25 @@ export default {
             this.serverError = ''
 
             try {
+                // Huella fijada al compilar o, si no hay, la vista en el primer acceso (TOFU).
                 const identityResponse = await api.get('/server/public-key')
 
                 const serverPublicKey = await importServerSigningPublicKey(
-                    identityResponse.data
+                    identityResponse.data,
+                    import.meta.env.VITE_SERVER_KEY_FINGERPRINT ||
+                        localStorage.getItem('serverKeyFingerprint')
                 )
-
+                localStorage.setItem('serverKeyFingerprint', identityResponse.data.fingerprint_sha256)
+                // La contraseña no sale del navegador: solo se envía la clave de autenticación.
+                const masterKey = await deriveMasterKey(this.email, this.password)
                 const challengeResponse = await api.post('/login/challenge', {
                     email: this.email,
-                    password: this.password
+                    auth_key: await deriveAuthKey(masterKey)
                 })
 
                 const privateKeys = await restorePrivateKeys(
                     challengeResponse.data.private_key_bundle,
-                    this.password
+                    masterKey
                 )
 
                 const signature = await signChallenge(
@@ -489,8 +496,8 @@ export default {
                     )
                 }
 
-                localStorage.setItem('token', response.data.token)
-
+                storePrivateKeys(privateKeys)
+                storeIdentity(response.data.user, serverPublicKey)
                 this.$emit('login-success', response.data)
 
                 storePrivateKeys(privateKeys)
@@ -525,18 +532,22 @@ export default {
             this.loading = true
 
             try {
-                const keyPairs = await generateUserKeyPairs()
-                const [publicKey, signingPublicKey, privateKeyBundle] = await Promise.all([
+                const [keyPairs, masterKey] = await Promise.all([
+                    generateUserKeyPairs(),
+                    deriveMasterKey(this.email, this.password)
+                ])
+                const [publicKey, signingPublicKey, privateKeyBundle, authKey] = await Promise.all([
                     exportPublicKey(keyPairs.encryption.publicKey),
                     exportPublicKey(keyPairs.signing.publicKey),
-                    encryptPrivateKeys(keyPairs, this.password)
+                    encryptPrivateKeys(keyPairs, masterKey),
+                    deriveAuthKey(masterKey)
                 ])
 
                 const response = await api.post('/register', {
                     name: this.name,
                     surname: this.lastName,
                     email: this.email,
-                    password: this.password,
+                    auth_key: authKey,
                     dni: this.dni.trim().toUpperCase(),
                     public_key: publicKey,
                     signing_public_key: signingPublicKey,

@@ -4,31 +4,43 @@ const rsaAlgorithm = {
     hash: 'SHA-256'
 }
 const pbkdf2Iterations = 600000
+const privateKeyBundleVersion = 2
 const privateKeyBundleContext = new TextEncoder().encode(
-    'securitybank-private-key-bundle-v1'
+    'securitybank-private-key-bundle-v2'
 )
+const masterKeyContext = 'securitybank-master-key-v2:'
+const authKeyLabel = new TextEncoder().encode('securitybank-auth-key-v2')
+const privateKeysKeyLabel = new TextEncoder().encode('securitybank-private-keys-v2')
 const userKeyCertificateVersion = 'securitybank-user-keys-v1'
 
 // Convierte datos binarios a Base64 para poder transportarlos como texto.
-function arrayBufferToBase64(buffer) {
+// Procesa bloques para que documentos de varios MB no sean lentos.
+export function arrayBufferToBase64(buffer) {
     const bytes = new Uint8Array(buffer)
+    const chunkSize = 0x8000
     let binary = ''
 
-    bytes.forEach((byte) => {
-        binary += String.fromCharCode(byte)
-    })
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+    }
 
     return btoa(binary)
 }
 
 // Convierte texto en Base64 a los datos binarios originales.
-function base64ToBytes(value) {
+export function base64ToBytes(value) {
     const binary = atob(value)
-    return Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const bytes = new Uint8Array(binary.length)
+
+    for (let index = 0; index < binary.length; index++) {
+        bytes[index] = binary.charCodeAt(index)
+    }
+
+    return bytes
 }
 
 // Obtiene bytes aleatorios usando el generador seguro del navegador.
-function randomBytes(length) {
+export function randomBytes(length) {
     return crypto.getRandomValues(new Uint8Array(length))
 }
 
@@ -74,31 +86,53 @@ function userKeyCertificatePayload(email, publicKey, signingPublicKey) {
     return payload
 }
 
-// Deriva una clave AES no exportable a partir de la contraseña y la sal.
-async function derivePrivateKeyEncryptionKey(password, salt) {
+// Deriva de la contraseña una clave maestra que nunca sale del navegador. El
+// correo normalizado actúa como sal para poder derivarla antes de autenticarse.
+export async function deriveMasterKey(email, password) {
     const passwordKey = await crypto.subtle.importKey(
         'raw',
         new TextEncoder().encode(password),
         'PBKDF2',
         false,
-        ['deriveKey']
+        ['deriveBits']
     )
-
-    return crypto.subtle.deriveKey(
+    const masterKey = await crypto.subtle.deriveBits(
         {
             name: 'PBKDF2',
             hash: 'SHA-256',
-            salt,
+            salt: new TextEncoder().encode(masterKeyContext + email.trim().toLowerCase()),
             iterations: pbkdf2Iterations
         },
         passwordKey,
-        {
-            name: 'AES-GCM',
-            length: 256
-        },
-        false,
-        ['encrypt', 'decrypt']
+        256
     )
+
+    return crypto.subtle.importKey(
+        'raw',
+        masterKey,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+    )
+}
+
+// Obtiene la clave que se envía al servidor para autenticarse. Es independiente
+// de la que protege las claves privadas: conocerla no permite descifrarlas.
+export async function deriveAuthKey(masterKey) {
+    const authKey = await crypto.subtle.sign('HMAC', masterKey, authKeyLabel)
+
+    return arrayBufferToBase64(authKey)
+}
+
+// Deriva de la clave maestra la clave AES no exportable que protege las claves privadas.
+async function derivePrivateKeyEncryptionKey(masterKey, salt) {
+    const encryptionKey = await crypto.subtle.sign(
+        'HMAC',
+        masterKey,
+        new Uint8Array([...privateKeysKeyLabel, ...salt])
+    )
+
+    return crypto.subtle.importKey('raw', encryptionKey, 'AES-GCM', false, ['encrypt', 'decrypt'])
 }
 
 // Genera el par usado para cifrar y descifrar claves AES.
@@ -147,10 +181,10 @@ export async function exportPrivateKey(privateKey) {
     return arrayBufferToBase64(exportedKey)
 }
 
-// Protege las dos claves privadas con una clave derivada de la contraseña.
-export async function encryptPrivateKeys(keyPairs, password) {
-    if (!password) {
-        throw new Error('La contraseña es obligatoria para proteger las claves')
+// Protege las dos claves privadas con una clave derivada de la clave maestra.
+export async function encryptPrivateKeys(keyPairs, masterKey) {
+    if (!masterKey) {
+        throw new Error('La clave maestra es obligatoria para proteger las claves')
     }
 
     const privateKeys = {
@@ -160,7 +194,7 @@ export async function encryptPrivateKeys(keyPairs, password) {
     const plaintext = new TextEncoder().encode(JSON.stringify(privateKeys))
     const salt = randomBytes(16)
     const nonce = randomBytes(12)
-    const encryptionKey = await derivePrivateKeyEncryptionKey(password, salt)
+    const encryptionKey = await derivePrivateKeyEncryptionKey(masterKey, salt)
     const ciphertext = await crypto.subtle.encrypt(
         {
             name: 'AES-GCM',
@@ -172,9 +206,9 @@ export async function encryptPrivateKeys(keyPairs, password) {
     )
 
     return {
-        version: 1,
+        version: privateKeyBundleVersion,
         algorithm: 'AES-256-GCM',
-        kdf: 'PBKDF2-HMAC-SHA256',
+        kdf: 'PBKDF2-HMAC-SHA256+HMAC-SHA256',
         iterations: pbkdf2Iterations,
         salt: arrayBufferToBase64(salt),
         nonce: arrayBufferToBase64(nonce),
@@ -182,16 +216,16 @@ export async function encryptPrivateKeys(keyPairs, password) {
     }
 }
 
-// Recupera las claves privadas cuando la contraseña y el paquete son válidos.
-export async function decryptPrivateKeys(bundle, password) {
-    if (bundle?.version !== 1 || bundle?.iterations !== pbkdf2Iterations) {
+// Recupera las claves privadas cuando la clave maestra y el paquete son válidos.
+export async function decryptPrivateKeys(bundle, masterKey) {
+    if (bundle?.version !== privateKeyBundleVersion || bundle?.iterations !== pbkdf2Iterations) {
         throw new Error('El formato de las claves privadas no es compatible')
     }
 
     const salt = base64ToBytes(bundle.salt)
     const nonce = base64ToBytes(bundle.nonce)
     const ciphertext = base64ToBytes(bundle.ciphertext)
-    const encryptionKey = await derivePrivateKeyEncryptionKey(password, salt)
+    const encryptionKey = await derivePrivateKeyEncryptionKey(masterKey, salt)
     const plaintext = await crypto.subtle.decrypt(
         {
             name: 'AES-GCM',
@@ -233,6 +267,20 @@ export async function importEncryptionPublicKey(encodedKey) {
     )
 }
 
+// Importa la clave pública que verifica las firmas de un usuario.
+export async function importSigningPublicKey(encodedKey) {
+    return crypto.subtle.importKey(
+        'spki',
+        base64ToBytes(encodedKey),
+        {
+            name: 'RSA-PSS',
+            hash: 'SHA-256'
+        },
+        false,
+        ['verify']
+    )
+}
+
 // Importa la clave privada destinada a firmar desafíos de autenticación.
 export async function importSigningPrivateKey(encodedKey) {
     return crypto.subtle.importKey(
@@ -248,8 +296,8 @@ export async function importSigningPrivateKey(encodedKey) {
 }
 
 // Descifra e importa las dos claves privadas como claves no exportables.
-export async function restorePrivateKeys(bundle, password) {
-    const encodedKeys = await decryptPrivateKeys(bundle, password)
+export async function restorePrivateKeys(bundle, masterKey) {
+    const encodedKeys = await decryptPrivateKeys(bundle, masterKey)
     const [encryption, signing] = await Promise.all([
         importEncryptionPrivateKey(encodedKeys.encryption),
         importSigningPrivateKey(encodedKeys.signing)
@@ -272,8 +320,9 @@ export async function signChallenge(signingPrivateKey, encodedChallenge) {
     return arrayBufferToBase64(signature)
 }
 
-// Importa y valida la identidad pública publicada por el servidor.
-export async function importServerSigningPublicKey(identity) {
+// Importa y valida la identidad pública publicada por el servidor. Si se indica
+// una huella de confianza, la clave recibida debe coincidir con ella.
+export async function importServerSigningPublicKey(identity, trustedFingerprint) {
     if (
         identity?.version !== 1 ||
         identity?.public_key_algorithm !== 'RSA-3072' ||
@@ -291,6 +340,9 @@ export async function importServerSigningPublicKey(identity) {
 
     if (encodedFingerprint !== identity.fingerprint_sha256) {
         throw new Error('La huella de la clave pública del servidor no coincide')
+    }
+    if (trustedFingerprint && encodedFingerprint !== trustedFingerprint) {
+        throw new Error('La identidad del servidor ha cambiado: no se continúa por seguridad')
     }
 
     const publicKey = await crypto.subtle.importKey(
@@ -351,14 +403,26 @@ export async function generateDataEncryptionKey() {
     )
 }
 
-// Cifra datos con AES-GCM y un nonce aleatorio de 12 bytes.
-export async function encryptData(encryptionKey, data) {
+// Prepara los parámetros de AES-GCM con datos adicionales autenticados opcionales.
+function aesGcmParameters(nonce, additionalData) {
+    const parameters = {
+        name: 'AES-GCM',
+        iv: nonce
+    }
+
+    if (additionalData !== undefined) {
+        parameters.additionalData = normalizeData(additionalData)
+    }
+
+    return parameters
+}
+
+// Cifra datos con AES-GCM y un nonce aleatorio de 12 bytes. Los datos
+// adicionales (AAD) no se cifran, pero quedan protegidos por el tag GCM.
+export async function encryptData(encryptionKey, data, additionalData) {
     const nonce = randomBytes(12)
     const ciphertext = await crypto.subtle.encrypt(
-        {
-            name: 'AES-GCM',
-            iv: nonce
-        },
+        aesGcmParameters(nonce, additionalData),
         encryptionKey,
         normalizeData(data)
     )
@@ -371,7 +435,7 @@ export async function encryptData(encryptionKey, data) {
 }
 
 // Descifra y verifica la integridad de datos protegidos con AES-GCM.
-export async function decryptData(encryptionKey, encryptedData) {
+export async function decryptData(encryptionKey, encryptedData, additionalData) {
     const nonce = base64ToBytes(encryptedData?.nonce)
     const ciphertext = base64ToBytes(encryptedData?.ciphertext)
 
@@ -384,10 +448,7 @@ export async function decryptData(encryptionKey, encryptedData) {
     }
 
     const plaintext = await crypto.subtle.decrypt(
-        {
-            name: 'AES-GCM',
-            iv: nonce
-        },
+        aesGcmParameters(nonce, additionalData),
         encryptionKey,
         ciphertext
     )
