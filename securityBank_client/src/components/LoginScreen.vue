@@ -3,7 +3,7 @@
     <div class=background>
         <div class="container py-5">
             <div class="row justify-content-center">
-                <div class="col-12 col-md-9 col-lg-6 col-xl-5">
+                <div class="col-12 col-lg-6 col-xl-5">
 
                     <div class="card align-items-center p-3 mb-4">
                         <div class="brand-icon mb-3">🔒</div>
@@ -13,7 +13,11 @@
                         </p>
                     </div>
 
-                    <div class="card border-0 shadow-sm">
+                    <div v-if="loginBlock">
+                        <TooManyLoginAttemptsView :initial-seconds="lockedUntil" @retry-login="retryLogin" />
+                    </div>
+
+                    <div v-else class="card border-0 shadow-sm">
                         <!-- INICIO DE SESIÓN -->
                         <template v-if="!registerMode">
                             <div class="card-header bg-white border-0 pt-4 px-4">
@@ -243,6 +247,7 @@
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 
@@ -260,18 +265,15 @@ import {
     importServerSigningPublicKey,
     restorePrivateKeys,
     signChallenge,
-    verifyUserPublicKeysCertificate
 } from '../services/crypto'
 import { storeIdentity, storePrivateKeys } from '../services/keyStore'
 
 export default {
     name: 'LoginScreen',
-
     data() {
         return {
             registerMode: false,
             loading: false,
-
             email: '',
             password: '',
             confirmPassword: '',
@@ -279,9 +281,8 @@ export default {
             lastName: '',
             dni: '',
             acceptTerms: false,
-
             serverError: '',
-
+            lockedUntil: null,
             errors: {
                 email: '',
                 password: '',
@@ -294,6 +295,15 @@ export default {
         }
     },
 
+    components: {
+        TooManyLoginAttemptsView
+    },
+
+    mounted() {
+        // El bloqueo se gestiona desde el backend.
+        // No se persiste en localStorage.
+    },
+
     methods: {
         clearErrors() {
             this.serverError = ''
@@ -301,6 +311,13 @@ export default {
             Object.keys(this.errors).forEach((key) => {
                 this.errors[key] = ''
             })
+        },
+
+        retryLogin() {
+            this.loginBlock = false
+            this.lockedUntil = 0
+            this.password = ''
+            this.serverError = ''
         },
 
         switchMode(register) {
@@ -427,16 +444,19 @@ export default {
             return valid
         },
 
+
         async logUser() {
             if (this.loading || !this.validateLogin()) {
                 return
             }
 
             this.loading = true
+            this.serverError = ''
 
             try {
                 // Huella fijada al compilar o, si no hay, la vista en el primer acceso (TOFU).
                 const identityResponse = await api.get('/server/public-key')
+
                 const serverPublicKey = await importServerSigningPublicKey(
                     identityResponse.data,
                     import.meta.env.VITE_SERVER_KEY_FINGERPRINT ||
@@ -449,14 +469,17 @@ export default {
                     email: this.email,
                     auth_key: await deriveAuthKey(masterKey)
                 })
+
                 const privateKeys = await restorePrivateKeys(
                     challengeResponse.data.private_key_bundle,
                     masterKey
                 )
+
                 const signature = await signChallenge(
                     privateKeys.signing,
                     challengeResponse.data.challenge
                 )
+
                 const response = await api.post('/login/verify', {
                     challenge_id: challengeResponse.data.challenge_id,
                     signature
@@ -466,19 +489,32 @@ export default {
                     serverPublicKey,
                     response.data.user
                 )
+
                 if (!certificateIsValid) {
-                    throw new Error('El certificado de las claves del usuario no es válido')
+                    throw new Error(
+                        'El certificado de las claves del usuario no es válido'
+                    )
                 }
 
                 storePrivateKeys(privateKeys)
                 storeIdentity(response.data.user, serverPublicKey)
                 this.$emit('login-success', response.data)
+
+                storePrivateKeys(privateKeys)
+
             } catch (error) {
-                if (error.response?.status === 401) {
-                    this.serverError = 'Correo o contraseña incorrectos.'
+                const status = error.response?.status
+                const data = error.response?.data
+
+                if (status === 423 && data?.retry_after_seconds > 0) {
+                    // El backend ha bloqueado la cuenta
+                    this.lockedUntil = data.retry_after_seconds
+                    this.loginBlock = true
+                } else if (status === 401) {
+                    this.serverError = 'Correo o contraseña incorrectos'
                 } else {
                     this.serverError =
-                        error.response?.data?.error ||
+                        data?.error ||
                         error.message ||
                         'No se ha podido iniciar sesión. Inténtalo de nuevo.'
                 }
@@ -486,6 +522,7 @@ export default {
                 this.loading = false
             }
         },
+
 
         async registerUser() {
             if (this.loading || !this.validateRegistration()) {
@@ -526,6 +563,7 @@ export default {
                 this.confirmPassword = ''
                 this.serverError = 'Registro completado. Ya puedes iniciar sesión.'
             } catch (error) {
+                console.log(error);
                 this.serverError =
                     error.response?.data?.error ||
                     'No se ha podido completar el registro. Inténtalo de nuevo.'

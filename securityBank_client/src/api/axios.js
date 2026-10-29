@@ -1,15 +1,26 @@
-
 import axios from 'axios'
 
-// La sesión viaja en una cookie HttpOnly que el navegador envía solo a la API:
-// el token no es accesible desde JavaScript.
+const HTTPS_PORT = import.meta.env.VITE_HTTPS_PORT || '8443'
+
 const api = axios.create({
-    baseURL: '/api',
+    baseURL: `https://localhost:${HTTPS_PORT}/api`,
     timeout: 10000,
     headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json'
     }
+})
+
+api.interceptors.request.use(config => {
+    const token = localStorage.getItem('token')
+
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+    } else {
+        delete config.headers.Authorization
+    }
+
+    return config
 })
 
 export default api
