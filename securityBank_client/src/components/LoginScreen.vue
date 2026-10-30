@@ -264,10 +264,11 @@ import {
     generateUserKeyPairs,
     importServerSigningPublicKey,
     restorePrivateKeys,
+    verifyUserPublicKeysCertificate,
     signChallenge,
 } from '../services/crypto'
 import { storeIdentity, storePrivateKeys } from '../services/keyStore'
-
+import TooManyLoginAttemptsView from './TooManyLoginAttemptsView.vue';
 export default {
     name: 'LoginScreen',
     data() {
@@ -489,6 +490,8 @@ export default {
                     serverPublicKey,
                     response.data.user
                 )
+
+                console.log(certificateIsValid);
 
                 if (!certificateIsValid) {
                     throw new Error(
