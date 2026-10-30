@@ -1,25 +1,47 @@
 <template>
-    <div class="lock-page">
-        <div class="lock-card">
-            <span class="lock-label">Acceso bloqueado</span>
-            <h2>Demasiados intentos</h2>
-            <p>Espera antes de volver a intentarlo.</p>
+    <div>
+        <span class="lock-icon">
+            <AppIcon name="lock" />
+        </span>
 
-            <div class="timer">{{ formattedTime }}</div>
+        <span class="lock-label">Acceso bloqueado</span>
+        <h1 class="lock-title">Demasiados intentos</h1>
+        <p class="lock-text">
+            Por tu seguridad, hemos bloqueado temporalmente el acceso a esta cuenta tras varios intentos
+            fallidos de inicio de sesión.
+        </p>
+
+        <div class="timer-box">
+            <span class="section-label">Podrás volver a intentarlo en</span>
+            <span class="timer" role="timer">{{ formattedTime }}</span>
         </div>
+
+        <button type="button" class="btn btn-outline-primary w-100" @click="$emit('retry-login')">
+            <AppIcon name="arrow-left" class="me-2" />
+            Volver al inicio de sesión
+        </button>
     </div>
 </template>
 
 <script lang="ts">
+import AppIcon from './AppIcon.vue'
+
+// Cuenta atrás del bloqueo que impone el servidor. Se calcula sobre la hora de fin
+// para no retrasarse cuando el navegador ralentiza los temporizadores de la pestaña.
 export default {
     name: 'TooManyLoginAttemptsView',
+
+    components: { AppIcon },
 
     props: {
         initialSeconds: { type: Number, required: true },
     },
 
+    emits: ['retry-login'],
+
     data() {
         return {
+            endsAt: Date.now() + this.initialSeconds * 1000,
             remainingSeconds: Math.max(0, this.initialSeconds),
             countdownInterval: null as ReturnType<typeof setInterval> | null,
         }
@@ -31,86 +53,76 @@ export default {
             const sec = this.remainingSeconds % 60
             return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
         },
-
-        remainingMinutes(): number {
-            return Math.ceil(this.remainingSeconds / 60)
-        },
     },
 
     mounted() {
         this.countdownInterval = setInterval(() => {
-            if (this.remainingSeconds > 0) {
-                this.remainingSeconds--
-            } else if (this.countdownInterval) {
-                clearInterval(this.countdownInterval)
+            this.remainingSeconds = Math.max(0, Math.ceil((this.endsAt - Date.now()) / 1000))
+
+            // Al terminar el bloqueo se vuelve al formulario de acceso.
+            if (this.remainingSeconds === 0) {
+                this.$emit('retry-login')
             }
         }, 1000)
     },
 
-    beforeDestroy() {
+    beforeUnmount() {
         if (this.countdownInterval) clearInterval(this.countdownInterval)
     },
 }
 </script>
 
 <style scoped>
-.lock-page {
-    position: fixed;
-    inset: 0;
-    display: flex;
+.lock-icon {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
-    box-sizing: border-box;
-    z-index: 10;
-}
-
-.lock-card {
-    width: 100%;
-    max-width: 500px;
-    padding: 1.75rem;
-    text-align: center;
-    background: white;
-    border: 1px solid #e5e7eb;
-    border-radius: 14px;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 5%);
-
-    transform: translateY(-200px);
+    width: 3rem;
+    height: 3rem;
+    margin-bottom: 1.25rem;
+    border-radius: 50%;
+    font-size: 1.375rem;
+    color: var(--sb-danger);
+    background-color: var(--sb-danger-bg);
 }
 
 .lock-label {
-    color: #b42318;
-    font-size: 1rem;
+    display: block;
+    font-size: 0.75rem;
     font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sb-danger);
 }
 
-.lock-card h2 {
-    margin: 0.8rem 0 0.6rem;
-    color: #163b65;
-    font-size: 1.3rem;
+.lock-title {
+    margin: 0.25rem 0 0.375rem;
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--sb-navy-900);
 }
 
-.lock-card p {
-    margin-bottom: 2rem;
-    color: #64748b;
-    font-size: 0.95rem;
+.lock-text {
+    margin-bottom: 1.5rem;
+    color: var(--sb-muted);
+}
+
+.timer-box {
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
+    border: 1px solid var(--sb-border);
+    border-radius: var(--sb-radius);
+    text-align: center;
+    background-color: var(--sb-surface-muted);
 }
 
 .timer {
-    color: #163b65;
-    font-size: 2.8rem;
-    font-weight: 700;
-    line-height: 1.3;
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 2.75rem;
+    font-weight: 600;
+    line-height: 1.2;
     font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 400px) {
-    .lock-card {
-        padding: 1.4rem;
-    }
-
-    .timer {
-        font-size: 2.4rem;
-    }
+    color: var(--sb-navy-900);
 }
 </style>
