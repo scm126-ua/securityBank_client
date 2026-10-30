@@ -1,6 +1,6 @@
 <template>
 
-    <div class=background>
+    <div class="background">
         <div class="container py-5">
             <div class="row justify-content-center">
                 <div class="col-12 col-lg-6 col-xl-5">
@@ -20,75 +20,128 @@
                     <div v-else class="card border-0 shadow-sm">
                         <!-- INICIO DE SESIÓN -->
                         <template v-if="!registerMode">
-                            <div class="card-header bg-white border-0 pt-4 px-4">
-                                <h2 class="h4 fw-bold mb-1">Iniciar sesión</h2>
-                                <p class="text-secondary mb-0">
-                                    Accede a tu cuenta bancaria.
-                                </p>
-                            </div>
-
-                            <div class="card-body p-4">
-                                <div v-if="serverError" class="alert alert-danger" role="alert">
-                                    {{ serverError }}
+                            <!-- PASO 2FA EN LOGIN -->
+                            <div v-if="totpLoginRequired">
+                                <div class="card-header bg-white border-0 pt-4 px-4 text-center">
+                                    <div class="brand-icon-sm mx-auto mb-2">🛡️</div>
+                                    <h2 class="h4 fw-bold mb-1">Verificación en dos pasos</h2>
+                                    <p class="text-secondary mb-0 small">
+                                        Introduce el código de tu aplicación de autenticación
+                                    </p>
                                 </div>
 
-                                <form @submit.prevent="logUser" novalidate>
-                                    <!-- Email -->
-                                    <div class="mb-3">
-                                        <label for="loginEmail" class="form-label fw-semibold">
-                                            Correo electrónico
-                                        </label>
+                                <div class="card-body p-4">
+                                    <div v-if="serverError" class="alert alert-danger" role="alert">
+                                        {{ serverError }}
+                                    </div>
 
-                                        <input id="loginEmail" v-model.trim="email" type="email"
-                                            class="form-control form-control-lg" :class="{ 'is-invalid': errors.email }"
-                                            placeholder="usuario@correo.com" autocomplete="username" required
-                                            maxlength="254" @input="errors.email = ''; serverError = ''" />
+                                    <form @submit.prevent="verifyLoginTotp" novalidate>
+                                        <div class="mb-4">
+                                            <label for="loginTotpCode" class="form-label fw-semibold text-center d-block">
+                                                Código de seguridad (6 dígitos)
+                                            </label>
 
-                                        <div v-if="errors.email" class="invalid-feedback">
-                                            {{ errors.email }}
+                                            <input id="loginTotpCode" v-model.trim="loginTotpCode" type="text"
+                                                class="form-control form-control-lg text-center fs-3 fw-bold letter-spacing"
+                                                :class="{ 'is-invalid': errors.loginTotpCode }"
+                                                placeholder="000000" maxlength="6" autofocus required
+                                                @input="errors.loginTotpCode = ''; serverError = ''" />
+
+                                            <div v-if="errors.loginTotpCode" class="invalid-feedback text-center">
+                                                {{ errors.loginTotpCode }}
+                                            </div>
+
+                                            <div class="form-text text-center mt-2">
+                                                Abre Google Authenticator o tu app 2FA habitual.
+                                            </div>
                                         </div>
+
+                                        <button type="submit" class="btn btn-primary btn-lg w-100 mb-2" :disabled="loading">
+                                            <span v-if="loading" class="spinner-border spinner-border-sm me-2"
+                                                aria-hidden="true"></span>
+                                            {{ loading ? 'Verificando...' : 'Verificar y acceder' }}
+                                        </button>
+
+                                        <button type="button" class="btn btn-outline-secondary w-100"
+                                            @click="cancelLoginTotp" :disabled="loading">
+                                            Volver
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- PASO NORMAL DE LOGIN -->
+                            <div v-else>
+                                <div class="card-header bg-white border-0 pt-4 px-4">
+                                    <h2 class="h4 fw-bold mb-1">Iniciar sesión</h2>
+                                    <p class="text-secondary mb-0">
+                                        Accede a tu cuenta bancaria.
+                                    </p>
+                                </div>
+
+                                <div class="card-body p-4">
+                                    <div v-if="serverError" class="alert alert-danger" role="alert">
+                                        {{ serverError }}
                                     </div>
 
-                                    <!-- Contraseña -->
-                                    <div class="mb-3">
-                                        <label for="loginPassword" class="form-label fw-semibold">
-                                            Contraseña
-                                        </label>
+                                    <form @submit.prevent="logUser" novalidate>
+                                        <!-- Email -->
+                                        <div class="mb-3">
+                                            <label for="loginEmail" class="form-label fw-semibold">
+                                                Correo electrónico
+                                            </label>
 
-                                        <input id="loginPassword" v-model="password" type="password"
-                                            class="form-control form-control-lg"
-                                            :class="{ 'is-invalid': errors.password }"
-                                            placeholder="Introduce tu contraseña" autocomplete="current-password"
-                                            required @input="errors.password = ''; serverError = ''" />
+                                            <input id="loginEmail" v-model.trim="email" type="email"
+                                                class="form-control form-control-lg" :class="{ 'is-invalid': errors.email }"
+                                                placeholder="usuario@correo.com" autocomplete="username" required
+                                                maxlength="254" @input="errors.email = ''; serverError = ''" />
 
-                                        <div v-if="errors.password" class="invalid-feedback">
-                                            {{ errors.password }}
+                                            <div v-if="errors.email" class="invalid-feedback">
+                                                {{ errors.email }}
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    <div class="d-flex justify-content-end mb-4">
-                                        <a href="#" @click.prevent="forgotPassword">
-                                            ¿Has olvidado tu contraseña?
-                                        </a>
-                                    </div>
+                                        <!-- Contraseña -->
+                                        <div class="mb-3">
+                                            <label for="loginPassword" class="form-label fw-semibold">
+                                                Contraseña
+                                            </label>
 
-                                    <button type="submit" class="btn btn-primary btn-lg w-100" :disabled="loading">
-                                        <span v-if="loading" class="spinner-border spinner-border-sm me-2"
-                                            aria-hidden="true"></span>
+                                            <input id="loginPassword" v-model="password" type="password"
+                                                class="form-control form-control-lg"
+                                                :class="{ 'is-invalid': errors.password }"
+                                                placeholder="Introduce tu contraseña" autocomplete="current-password"
+                                                required @input="errors.password = ''; serverError = ''" />
 
-                                        {{ loading ? 'Accediendo...' : 'Iniciar sesión' }}
-                                    </button>
-                                </form>
+                                            <div v-if="errors.password" class="invalid-feedback">
+                                                {{ errors.password }}
+                                            </div>
+                                        </div>
 
-                                <hr class="my-4" />
+                                        <div class="d-flex justify-content-end mb-4">
+                                            <a href="#" @click.prevent="forgotPassword">
+                                                ¿Has olvidado tu contraseña?
+                                            </a>
+                                        </div>
 
-                                <p class="text-center mb-0">
-                                    ¿Todavía no tienes cuenta?
-                                    <button type="button" class="btn btn-link p-0 align-baseline"
-                                        @click="switchMode(true)">
-                                        Regístrate
-                                    </button>
-                                </p>
+                                        <button type="submit" class="btn btn-primary btn-lg w-100" :disabled="loading">
+                                            <span v-if="loading" class="spinner-border spinner-border-sm me-2"
+                                                aria-hidden="true"></span>
+
+                                            {{ loading ? 'Accediendo...' : 'Iniciar sesión' }}
+                                        </button>
+                                    </form>
+
+                                    <hr class="my-4" />
+
+                                    <p class="text-center mb-0">
+                                        ¿Todavía no tienes cuenta?
+                                        <button type="button" class="btn btn-link p-0 align-baseline"
+                                            @click="switchMode(true)">
+                                            Regístrate
+                                        </button>
+                                    </p>
+                                </div>
                             </div>
                         </template>
 
@@ -148,7 +201,7 @@
                                         <input id="registerEmail" v-model.trim="email" type="email" class="form-control"
                                             :class="{ 'is-invalid': errors.email }" placeholder="usuario@correo.com"
                                             autocomplete="email" maxlength="254" required
-                                            @input="errors.email = ''; serverError = ''" />
+                                            @input="errors.email = ''; serverError = ''; onEmailChange()" />
 
                                         <div v-if="errors.email" class="invalid-feedback">
                                             {{ errors.email }}
@@ -204,6 +257,71 @@
 
                                         <div v-if="errors.confirmPassword" class="invalid-feedback">
                                             {{ errors.confirmPassword }}
+                                        </div>
+                                    </div>
+
+                                    <!-- SECCIÓN / BOTÓN DE ACTIVACIÓN 2FA -->
+                                    <div class="mb-4">
+                                        <div class="card border bg-light">
+                                            <div class="card-body p-3">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <h6 class="fw-bold mb-1">
+                                                            <span class="me-1">🛡️</span> Autenticación de doble factor (2FA)
+                                                        </h6>
+                                                        <p class="small text-muted mb-0">
+                                                            Añade seguridad extra a tu cuenta con código TOTP.
+                                                        </p>
+                                                    </div>
+                                                    <button type="button" class="btn btn-sm"
+                                                        :class="enable2FA ? 'btn-outline-danger' : 'btn-primary'"
+                                                        @click="toggle2FA">
+                                                        {{ enable2FA ? 'Desactivar 2FA' : 'Activar 2FA' }}
+                                                    </button>
+                                                </div>
+
+                                                <!-- Desplegable de configuración TOTP -->
+                                                <div v-if="enable2FA" class="mt-3 pt-3 border-top">
+                                                    <div v-if="loadingTotp" class="text-center py-3">
+                                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                                        <span class="small">Generando código QR...</span>
+                                                    </div>
+
+                                                    <div v-else-if="totpError" class="alert alert-danger py-2 small mb-2">
+                                                        {{ totpError }}
+                                                        <button type="button" class="btn btn-link btn-sm p-0 ms-2"
+                                                            @click="generateRegistrationTotp">
+                                                            Reintentar
+                                                        </button>
+                                                    </div>
+
+                                                    <div v-else-if="totpData">
+                                                        <p class="small text-muted mb-2 text-center">
+                                                            1. Escanea este código QR con tu app (Google Authenticator, Authy, etc.):
+                                                        </p>
+                                                        <div class="text-center mb-2">
+                                                            <img :src="totpData.qr_code" alt="Código QR 2FA"
+                                                                class="img-thumbnail" style="width: 160px; height: 160px;" />
+                                                        </div>
+                                                        <div class="text-center small text-muted mb-3">
+                                                            O introduce la clave manualmente: <br />
+                                                            <code class="user-select-all fw-bold text-dark fs-6">{{ totpData.secret }}</code>
+                                                        </div>
+
+                                                        <label for="registerTotpCode" class="form-label fw-semibold small">
+                                                            2. Introduce el código de 6 dígitos que muestra tu app para confirmar:
+                                                        </label>
+                                                        <input id="registerTotpCode" v-model.trim="totpCode" type="text"
+                                                            class="form-control text-center fs-5 fw-bold letter-spacing"
+                                                            :class="{ 'is-invalid': errors.totpCode }"
+                                                            placeholder="000000" maxlength="6" autocomplete="one-time-code"
+                                                            @input="errors.totpCode = ''; serverError = ''" />
+                                                        <div v-if="errors.totpCode" class="invalid-feedback text-center">
+                                                            {{ errors.totpCode }}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -269,12 +387,14 @@ import {
 } from '../services/crypto'
 import { storeIdentity, storePrivateKeys } from '../services/keyStore'
 import TooManyLoginAttemptsView from './TooManyLoginAttemptsView.vue';
+
 export default {
     name: 'LoginScreen',
     data() {
         return {
             registerMode: false,
             loading: false,
+            loginBlock: false,
             email: '',
             password: '',
             confirmPassword: '',
@@ -283,7 +403,22 @@ export default {
             dni: '',
             acceptTerms: false,
             serverError: '',
-            lockedUntil: null,
+            lockedUntil: 0,
+
+            // 2FA Registro
+            enable2FA: false,
+            loadingTotp: false,
+            totpError: '',
+            totpData: null,
+            totpCode: '',
+
+            // 2FA Login
+            totpLoginRequired: false,
+            loginTotpCode: '',
+            pendingChallengeResponse: null,
+            pendingMasterKey: null,
+            pendingServerPublicKey: null,
+
             errors: {
                 email: '',
                 password: '',
@@ -291,18 +426,15 @@ export default {
                 lastName: '',
                 confirmPassword: '',
                 acceptTerms: '',
-                dni: ''
+                dni: '',
+                totpCode: '',
+                loginTotpCode: ''
             }
         }
     },
 
     components: {
         TooManyLoginAttemptsView
-    },
-
-    mounted() {
-        // El bloqueo se gestiona desde el backend.
-        // No se persiste en localStorage.
     },
 
     methods: {
@@ -326,36 +458,43 @@ export default {
             this.clearErrors()
             this.password = ''
             this.confirmPassword = ''
+            this.enable2FA = false
+            this.totpData = null
+            this.totpCode = ''
+            this.totpLoginRequired = false
+            this.loginTotpCode = ''
+        },
+
+        onEmailChange() {
+            if (this.enable2FA && this.totpData) {
+                // Si el usuario cambia el email después de generar el QR, refrescamos el QR si es válido
+                if (this.isValidEmail(this.email)) {
+                    this.generateRegistrationTotp()
+                }
+            }
         },
 
         isValidEmail(email) {
             return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
         },
 
-
         validateDNI(dni) {
             if (typeof dni !== 'string') {
                 return false
             }
 
-            // Eliminar espacios al principio y al final y convertir a mayúsculas.
             dni = dni.trim().toUpperCase()
 
-            // Comprobar formato: 8 números y una letra.
             if (!/^\d{8}[A-Z]$/.test(dni)) {
                 return false
             }
 
-            // Letras utilizadas para validar el DNI.
             const letters = 'TRWAGMYFPDXBNJZSQVHLCKE'
-
-            // Calcular la letra correspondiente al número.
             const number = parseInt(dni.substring(0, 8), 10)
             const expectedLetter = letters[number % 23]
 
             return dni[8] === expectedLetter
         },
-
 
         validateLogin() {
             this.clearErrors()
@@ -437,6 +576,17 @@ export default {
                 valid = false
             }
 
+            // Validación de 2FA si está activo
+            if (this.enable2FA) {
+                if (!this.totpCode) {
+                    this.errors.totpCode = 'Introduce el código de 6 dígitos de tu app 2FA.'
+                    valid = false
+                } else if (!/^\d{6}$/.test(this.totpCode)) {
+                    this.errors.totpCode = 'El código debe tener 6 dígitos numéricos.'
+                    valid = false
+                }
+            }
+
             if (!this.acceptTerms) {
                 this.errors.acceptTerms = 'Debes aceptar las condiciones para continuar.'
                 valid = false
@@ -445,6 +595,53 @@ export default {
             return valid
         },
 
+        async toggle2FA() {
+            if (this.enable2FA) {
+                this.enable2FA = false
+                this.totpData = null
+                this.totpCode = ''
+                this.totpError = ''
+                this.errors.totpCode = ''
+                return
+            }
+
+            if (!this.email) {
+                this.errors.email = 'Introduce primero tu correo electrónico para configurar el 2FA.'
+                return
+            }
+            if (!this.isValidEmail(this.email)) {
+                this.errors.email = 'Introduce un correo electrónico válido antes de activar el 2FA.'
+                return
+            }
+
+            this.enable2FA = true
+            await this.generateRegistrationTotp()
+        },
+
+        async generateRegistrationTotp() {
+            this.loadingTotp = true
+            this.totpError = ''
+            try {
+                const response = await api.post('/totp/generate', {
+                    email: this.email.trim().toLowerCase()
+                })
+                this.totpData = response.data
+            } catch (err) {
+                this.totpError = err.response?.data?.error || 'No se pudo generar la clave 2FA.'
+            } finally {
+                this.loadingTotp = false
+            }
+        },
+
+        cancelLoginTotp() {
+            this.totpLoginRequired = false
+            this.loginTotpCode = ''
+            this.pendingChallengeResponse = null
+            this.pendingMasterKey = null
+            this.pendingServerPublicKey = null
+            this.password = ''
+            this.clearErrors()
+        },
 
         async logUser() {
             if (this.loading || !this.validateLogin()) {
@@ -455,7 +652,6 @@ export default {
             this.serverError = ''
 
             try {
-                // Huella fijada al compilar o, si no hay, la vista en el primer acceso (TOFU).
                 const identityResponse = await api.get('/server/public-key')
 
                 const serverPublicKey = await importServerSigningPublicKey(
@@ -464,53 +660,31 @@ export default {
                         localStorage.getItem('serverKeyFingerprint')
                 )
                 localStorage.setItem('serverKeyFingerprint', identityResponse.data.fingerprint_sha256)
-                // La contraseña no sale del navegador: solo se envía la clave de autenticación.
+
                 const masterKey = await deriveMasterKey(this.email, this.password)
                 const challengeResponse = await api.post('/login/challenge', {
                     email: this.email,
                     auth_key: await deriveAuthKey(masterKey)
                 })
 
-                const privateKeys = await restorePrivateKeys(
-                    challengeResponse.data.private_key_bundle,
-                    masterKey
-                )
-
-                const signature = await signChallenge(
-                    privateKeys.signing,
-                    challengeResponse.data.challenge
-                )
-
-                const response = await api.post('/login/verify', {
-                    challenge_id: challengeResponse.data.challenge_id,
-                    signature
-                })
-
-                const certificateIsValid = await verifyUserPublicKeysCertificate(
-                    serverPublicKey,
-                    response.data.user
-                )
-
-                console.log(certificateIsValid);
-
-                if (!certificateIsValid) {
-                    throw new Error(
-                        'El certificado de las claves del usuario no es válido'
-                    )
+                // Si el usuario tiene 2FA activado, solicitamos el código antes de continuar
+                if (challengeResponse.data.totp_required) {
+                    this.pendingChallengeResponse = challengeResponse
+                    this.pendingMasterKey = masterKey
+                    this.pendingServerPublicKey = serverPublicKey
+                    this.totpLoginRequired = true
+                    this.loginTotpCode = ''
+                    this.loading = false
+                    return
                 }
 
-                storePrivateKeys(privateKeys)
-                storeIdentity(response.data.user, serverPublicKey)
-                this.$emit('login-success', response.data)
-
-                storePrivateKeys(privateKeys)
+                await this.completeLogin(challengeResponse, masterKey, serverPublicKey, '')
 
             } catch (error) {
                 const status = error.response?.status
                 const data = error.response?.data
 
                 if (status === 423 && data?.retry_after_seconds > 0) {
-                    // El backend ha bloqueado la cuenta
                     this.lockedUntil = data.retry_after_seconds
                     this.loginBlock = true
                 } else if (status === 401) {
@@ -522,10 +696,85 @@ export default {
                         'No se ha podido iniciar sesión. Inténtalo de nuevo.'
                 }
             } finally {
+                if (!this.totpLoginRequired) {
+                    this.loading = false
+                }
+            }
+        },
+
+        async verifyLoginTotp() {
+            if (!this.loginTotpCode) {
+                this.errors.loginTotpCode = 'Introduce el código 2FA.'
+                return
+            }
+            if (!/^\d{6}$/.test(this.loginTotpCode)) {
+                this.errors.loginTotpCode = 'El código debe tener exactamente 6 dígitos numéricos.'
+                return
+            }
+
+            this.loading = true
+            this.serverError = ''
+            this.errors.loginTotpCode = ''
+
+            try {
+                await this.completeLogin(
+                    this.pendingChallengeResponse,
+                    this.pendingMasterKey,
+                    this.pendingServerPublicKey,
+                    this.loginTotpCode
+                )
+            } catch (error) {
+                const status = error.response?.status
+                const data = error.response?.data
+                if (status === 401) {
+                    this.errors.loginTotpCode = data?.error || 'Código 2FA incorrecto'
+                } else {
+                    this.serverError =
+                        data?.error ||
+                        error.message ||
+                        'Error al verificar el código 2FA.'
+                }
+            } finally {
                 this.loading = false
             }
         },
 
+        async completeLogin(challengeResponse, masterKey, serverPublicKey, totpCode) {
+            const privateKeys = await restorePrivateKeys(
+                challengeResponse.data.private_key_bundle,
+                masterKey
+            )
+
+            const signature = await signChallenge(
+                privateKeys.signing,
+                challengeResponse.data.challenge
+            )
+
+            const verifyPayload = {
+                challenge_id: challengeResponse.data.challenge_id,
+                signature
+            }
+            if (totpCode) {
+                verifyPayload.totp_code = totpCode
+            }
+
+            const response = await api.post('/login/verify', verifyPayload)
+
+            const certificateIsValid = await verifyUserPublicKeysCertificate(
+                serverPublicKey,
+                response.data.user
+            )
+
+            if (!certificateIsValid) {
+                throw new Error(
+                    'El certificado de las claves del usuario no es válido'
+                )
+            }
+
+            storePrivateKeys(privateKeys)
+            storeIdentity(response.data.user, serverPublicKey)
+            this.$emit('login-success', response.data)
+        },
 
         async registerUser() {
             if (this.loading || !this.validateRegistration()) {
@@ -546,7 +795,7 @@ export default {
                     deriveAuthKey(masterKey)
                 ])
 
-                const response = await api.post('/register', {
+                const payload = {
                     name: this.name,
                     surname: this.lastName,
                     email: this.email,
@@ -555,18 +804,22 @@ export default {
                     public_key: publicKey,
                     signing_public_key: signingPublicKey,
                     private_key_bundle: privateKeyBundle
-                })
+                }
 
-                // Llveamos el evento al padre
+                if (this.enable2FA && this.totpData && this.totpCode) {
+                    payload.totp_secret = this.totpData.secret
+                    payload.totp_code = this.totpCode
+                }
+
+                const response = await api.post('/register', payload)
+
                 this.$emit('register-success', response.data)
 
-                // Si el backend no inicia sesión automáticamente:
                 this.switchMode(false)
                 this.password = ''
                 this.confirmPassword = ''
                 this.serverError = 'Registro completado. Ya puedes iniciar sesión.'
             } catch (error) {
-                console.log(error);
                 this.serverError =
                     error.response?.data?.error ||
                     'No se ha podido completar el registro. Inténtalo de nuevo.'
@@ -588,7 +841,7 @@ export default {
     background-image: url('@/assets/background-login.jpg');
     background-size: cover;
     background-repeat: no-repeat;
-    height: 100vh;
+    min-height: 100vh;
     width: 100vw;
 }
 
@@ -603,6 +856,17 @@ export default {
     font-size: 30px;
 }
 
+.brand-icon-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: #163b65;
+    font-size: 24px;
+}
+
 .card {
     border-radius: 16px;
     overflow: hidden;
@@ -615,6 +879,10 @@ export default {
 .form-control:focus {
     border-color: #2878c8;
     box-shadow: 0 0 0 0.2rem rgba(40, 120, 200, 0.15);
+}
+
+.letter-spacing {
+    letter-spacing: 0.35rem;
 }
 
 .btn-primary {
