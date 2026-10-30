@@ -46,8 +46,12 @@
                     <span class="brand-name">SecurityBank</span>
                 </div>
 
+                <!-- ACCESO BLOQUEADO tras varios intentos fallidos -->
+                <TooManyLoginAttemptsView v-if="lockSeconds > 0" :initial-seconds="lockSeconds"
+                    @retry-login="retryLogin" />
+
                 <!-- INICIO DE SESIÓN -->
-                <template v-if="!registerMode">
+                <template v-else-if="!registerMode">
                     <h1 class="auth-title">Acceso clientes</h1>
                     <p class="auth-subtitle">Identifícate con tu correo electrónico y tu contraseña.</p>
 
@@ -296,6 +300,7 @@ import {
 } from '../services/crypto'
 import { storeIdentity, storePrivateKeys } from '../services/keyStore'
 import AppIcon from './AppIcon.vue'
+import TooManyLoginAttemptsView from './TooManyLoginAttemptsView.vue'
 
 // Garantías de seguridad que se muestran junto al formulario.
 const features = [
@@ -319,7 +324,7 @@ const features = [
 export default {
     name: 'LoginScreen',
 
-    components: { AppIcon },
+    components: { AppIcon, TooManyLoginAttemptsView },
 
     props: {
         // Aviso al volver a esta pantalla, por ejemplo tras cerrar la sesión.
@@ -336,6 +341,8 @@ export default {
             registerMode: false,
             loading: false,
             showPassword: false,
+            // Segundos que faltan para que el servidor vuelva a permitir el acceso.
+            lockSeconds: 0,
 
             email: '',
             password: '',
@@ -381,6 +388,13 @@ export default {
             Object.keys(this.errors).forEach((key) => {
                 this.errors[key] = ''
             })
+        },
+
+        // Vuelve al formulario de acceso tras el bloqueo, conservando el correo.
+        retryLogin() {
+            this.lockSeconds = 0
+            this.password = ''
+            this.clearErrors()
         },
 
         switchMode(register) {
@@ -555,11 +569,17 @@ export default {
                 storeIdentity(response.data.user, serverPublicKey)
                 this.$emit('login-success', response.data)
             } catch (error) {
-                if (error.response?.status === 401) {
+                const status = error.response?.status
+                const data = error.response?.data
+
+                if (status === 423 && data?.retry_after_seconds > 0) {
+                    // El backend ha bloqueado la cuenta
+                    this.lockSeconds = data.retry_after_seconds
+                } else if (status === 401) {
                     this.serverError = 'Correo o contraseña incorrectos.'
                 } else {
                     this.serverError =
-                        error.response?.data?.error ||
+                        data?.error ||
                         error.message ||
                         'No se ha podido iniciar sesión. Inténtalo de nuevo.'
                 }
