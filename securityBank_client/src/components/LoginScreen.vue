@@ -264,6 +264,7 @@ import {
     generateUserKeyPairs,
     importServerSigningPublicKey,
     restorePrivateKeys,
+    verifyUserPublicKeysCertificate,
     signChallenge,
 } from '../services/crypto'
 import { storeIdentity, storePrivateKeys } from '../services/keyStore'
@@ -489,6 +490,8 @@ export default {
                     serverPublicKey,
                     response.data.user
                 )
+
+                console.log(certificateIsValid);
 
                 if (!certificateIsValid) {
                     throw new Error(
