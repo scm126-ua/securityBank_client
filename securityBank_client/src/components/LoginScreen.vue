@@ -50,6 +50,56 @@
                 <TooManyLoginAttemptsView v-if="lockSeconds > 0" :initial-seconds="lockSeconds"
                     @retry-login="retryLogin" />
 
+                <!-- VERIFICACIÓN EN DOS PASOS al iniciar sesión -->
+                <template v-else-if="totpLoginRequired">
+                    <button type="button" class="back-link" :disabled="loading" @click="cancelLoginTotp">
+                        <AppIcon name="arrow-left" />
+                        Volver al inicio de sesión
+                    </button>
+
+                    <span class="step-icon">
+                        <AppIcon name="shield-check" />
+                    </span>
+                    <h1 class="auth-title">Verificación en dos pasos</h1>
+                    <p class="auth-subtitle">
+                        Introduce el código de 6 dígitos que muestra tu aplicación de autenticación.
+                    </p>
+
+                    <div v-if="serverError" class="alert alert-danger d-flex gap-2" role="alert">
+                        <AppIcon name="alert-circle" />
+                        <span>{{ serverError }}</span>
+                    </div>
+
+                    <form @submit.prevent="verifyLoginTotp" novalidate>
+                        <div class="mb-4">
+                            <label for="loginTotpCode" class="form-label">Código de verificación</label>
+
+                            <input id="loginTotpCode" ref="loginTotpInput" v-model.trim="loginTotpCode" type="text"
+                                class="form-control form-control-lg totp-input"
+                                :class="{ 'is-invalid': errors.loginTotpCode }" placeholder="000000"
+                                inputmode="numeric" autocomplete="one-time-code" maxlength="6" required
+                                @input="errors.loginTotpCode = ''; serverError = ''" />
+
+                            <div v-if="errors.loginTotpCode" class="invalid-feedback">
+                                {{ errors.loginTotpCode }}
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100" :disabled="loading">
+                            <span v-if="loading" class="spinner-border spinner-border-sm me-2"
+                                aria-hidden="true"></span>
+
+                            {{ loading ? 'Verificando...' : 'Verificar y acceder' }}
+                        </button>
+                    </form>
+
+                    <p class="security-note">
+                        <AppIcon name="info" class="me-1" />
+                        El código cambia cada 30 segundos. Consúltalo en Google Authenticator, Authy o tu
+                        aplicación habitual.
+                    </p>
+                </template>
+
                 <!-- INICIO DE SESIÓN -->
                 <template v-else-if="!registerMode">
                     <h1 class="auth-title">Acceso clientes</h1>
@@ -185,7 +235,7 @@
                                 <input id="registerEmail" v-model.trim="email" type="email" class="form-control"
                                     :class="{ 'is-invalid': errors.email }" placeholder="usuario@correo.com"
                                     autocomplete="email" maxlength="254" required
-                                    @input="errors.email = ''; serverError = ''" />
+                                    @input="errors.email = ''; serverError = ''; onEmailChange()" />
 
                                 <div v-if="errors.email" class="invalid-feedback">
                                     {{ errors.email }}
@@ -252,6 +302,52 @@
                             </li>
                         </ul>
 
+                        <!-- Verificación en dos pasos (opcional) -->
+                        <div class="option-box mb-4">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="option-icon">
+                                    <AppIcon name="shield-check" />
+                                </span>
+
+                                <div class="flex-grow-1">
+                                    <span class="option-title">
+                                        Verificación en dos pasos
+                                        <span class="option-badge">Opcional</span>
+                                    </span>
+                                    <span class="option-text">
+                                        Pide un código temporal de tu móvil cada vez que inicies sesión.
+                                    </span>
+                                </div>
+
+                                <button type="button" class="btn btn-sm"
+                                    :class="enable2FA ? 'btn-outline-secondary' : 'btn-outline-primary'"
+                                    :disabled="loadingTotp" @click="toggle2FA">
+                                    {{ enable2FA ? 'Desactivar' : 'Activar' }}
+                                </button>
+                            </div>
+
+                            <div v-if="enable2FA" class="option-content">
+                                <div v-if="loadingTotp" class="text-center text-muted small py-3">
+                                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                                    Generando el código QR...
+                                </div>
+
+                                <div v-else-if="totpError"
+                                    class="alert alert-danger d-flex flex-wrap align-items-center gap-2 mb-0" role="alert">
+                                    <AppIcon name="alert-circle" />
+                                    <span>{{ totpError }}</span>
+                                    <button type="button" class="btn btn-outline-danger btn-sm ms-auto"
+                                        @click="generateRegistrationTotp">
+                                        Reintentar
+                                    </button>
+                                </div>
+
+                                <TotpSetup v-else-if="totpData" v-model="totpCode" :setup="totpData"
+                                    input-id="registerTotpCode" :error="errors.totpCode"
+                                    @update:model-value="errors.totpCode = ''; serverError = ''" />
+                            </div>
+                        </div>
+
                         <!-- Condiciones -->
                         <div class="form-check mb-4">
                             <input id="acceptTerms" v-model="acceptTerms" type="checkbox" class="form-check-input"
@@ -301,6 +397,7 @@ import {
 import { storeIdentity, storePrivateKeys } from '../services/keyStore'
 import AppIcon from './AppIcon.vue'
 import TooManyLoginAttemptsView from './TooManyLoginAttemptsView.vue'
+import TotpSetup from './TotpSetup.vue'
 
 // Garantías de seguridad que se muestran junto al formulario.
 const features = [
@@ -324,7 +421,7 @@ const features = [
 export default {
     name: 'LoginScreen',
 
-    components: { AppIcon, TooManyLoginAttemptsView },
+    components: { AppIcon, TooManyLoginAttemptsView, TotpSetup },
 
     props: {
         // Aviso al volver a esta pantalla, por ejemplo tras cerrar la sesión.
@@ -356,6 +453,20 @@ export default {
             successMessage: '',
             infoMessage: this.notice,
 
+            // 2FA Registro
+            enable2FA: false,
+            loadingTotp: false,
+            totpError: '',
+            totpData: null,
+            totpCode: '',
+
+            // 2FA Login
+            totpLoginRequired: false,
+            loginTotpCode: '',
+            pendingChallengeResponse: null,
+            pendingMasterKey: null,
+            pendingServerPublicKey: null,
+
             errors: {
                 email: '',
                 password: '',
@@ -363,7 +474,9 @@ export default {
                 lastName: '',
                 confirmPassword: '',
                 acceptTerms: '',
-                dni: ''
+                dni: '',
+                totpCode: '',
+                loginTotpCode: ''
             }
         }
     },
@@ -403,6 +516,20 @@ export default {
             this.password = ''
             this.confirmPassword = ''
             this.showPassword = false
+            this.enable2FA = false
+            this.totpData = null
+            this.totpCode = ''
+            this.totpLoginRequired = false
+            this.loginTotpCode = ''
+        },
+
+        onEmailChange() {
+            if (this.enable2FA && this.totpData) {
+                // Si el usuario cambia el email después de generar el QR, refrescamos el QR si es válido
+                if (this.isValidEmail(this.email)) {
+                    this.generateRegistrationTotp()
+                }
+            }
         },
 
         isValidEmail(email) {
@@ -514,12 +641,71 @@ export default {
                 valid = false
             }
 
+            // Validación de 2FA si está activo
+            if (this.enable2FA) {
+                if (!this.totpCode) {
+                    this.errors.totpCode = 'Introduce el código de 6 dígitos de tu app 2FA.'
+                    valid = false
+                } else if (!/^\d{6}$/.test(this.totpCode)) {
+                    this.errors.totpCode = 'El código debe tener 6 dígitos numéricos.'
+                    valid = false
+                }
+            }
+
             if (!this.acceptTerms) {
                 this.errors.acceptTerms = 'Debes aceptar las condiciones para continuar.'
                 valid = false
             }
 
             return valid
+        },
+
+        async toggle2FA() {
+            if (this.enable2FA) {
+                this.enable2FA = false
+                this.totpData = null
+                this.totpCode = ''
+                this.totpError = ''
+                this.errors.totpCode = ''
+                return
+            }
+
+            if (!this.email) {
+                this.errors.email = 'Introduce primero tu correo electrónico para configurar el 2FA.'
+                return
+            }
+            if (!this.isValidEmail(this.email)) {
+                this.errors.email = 'Introduce un correo electrónico válido antes de activar el 2FA.'
+                return
+            }
+
+            this.enable2FA = true
+            await this.generateRegistrationTotp()
+        },
+
+        async generateRegistrationTotp() {
+            this.loadingTotp = true
+            this.totpError = ''
+            try {
+                const response = await api.post('/totp/generate', {
+                    email: this.email.trim().toLowerCase()
+                })
+                this.totpData = response.data
+            } catch (err) {
+                this.totpError = err.response?.data?.error || 'No se pudo generar la clave 2FA.'
+            } finally {
+                this.loadingTotp = false
+            }
+        },
+
+        cancelLoginTotp() {
+            this.totpLoginRequired = false
+            this.loginTotpCode = ''
+            this.pendingChallengeResponse = null
+            this.pendingMasterKey = null
+            this.pendingServerPublicKey = null
+            this.password = ''
+            this.clearErrors()
         },
 
         async logUser() {
@@ -544,30 +730,19 @@ export default {
                     email: this.email,
                     auth_key: await deriveAuthKey(masterKey)
                 })
-                const privateKeys = await restorePrivateKeys(
-                    challengeResponse.data.private_key_bundle,
-                    masterKey
-                )
-                const signature = await signChallenge(
-                    privateKeys.signing,
-                    challengeResponse.data.challenge
-                )
-                const response = await api.post('/login/verify', {
-                    challenge_id: challengeResponse.data.challenge_id,
-                    signature
-                })
 
-                const certificateIsValid = await verifyUserPublicKeysCertificate(
-                    serverPublicKey,
-                    response.data.user
-                )
-                if (!certificateIsValid) {
-                    throw new Error('El certificado de las claves del usuario no es válido')
+                // Si el usuario tiene 2FA activado, solicitamos el código antes de continuar
+                if (challengeResponse.data.totp_required) {
+                    this.pendingChallengeResponse = challengeResponse
+                    this.pendingMasterKey = masterKey
+                    this.pendingServerPublicKey = serverPublicKey
+                    this.totpLoginRequired = true
+                    this.loginTotpCode = ''
+                    this.$nextTick(() => this.$refs.loginTotpInput?.focus())
+                    return
                 }
 
-                storePrivateKeys(privateKeys)
-                storeIdentity(response.data.user, serverPublicKey)
-                this.$emit('login-success', response.data)
+                await this.completeLogin(challengeResponse, masterKey, serverPublicKey, '')
             } catch (error) {
                 const status = error.response?.status
                 const data = error.response?.data
@@ -586,6 +761,77 @@ export default {
             } finally {
                 this.loading = false
             }
+        },
+
+        async verifyLoginTotp() {
+            if (!this.loginTotpCode) {
+                this.errors.loginTotpCode = 'Introduce el código 2FA.'
+                return
+            }
+            if (!/^\d{6}$/.test(this.loginTotpCode)) {
+                this.errors.loginTotpCode = 'El código debe tener exactamente 6 dígitos numéricos.'
+                return
+            }
+
+            this.loading = true
+            this.serverError = ''
+            this.errors.loginTotpCode = ''
+
+            try {
+                await this.completeLogin(
+                    this.pendingChallengeResponse,
+                    this.pendingMasterKey,
+                    this.pendingServerPublicKey,
+                    this.loginTotpCode
+                )
+            } catch (error) {
+                const status = error.response?.status
+                const data = error.response?.data
+                if (status === 401) {
+                    this.errors.loginTotpCode = data?.error || 'Código 2FA incorrecto'
+                } else {
+                    this.serverError =
+                        data?.error ||
+                        error.message ||
+                        'Error al verificar el código 2FA.'
+                }
+            } finally {
+                this.loading = false
+            }
+        },
+
+        // Firma el desafío, lo verifica en el servidor y comprueba el certificado de las claves.
+        async completeLogin(challengeResponse, masterKey, serverPublicKey, totpCode) {
+            const privateKeys = await restorePrivateKeys(
+                challengeResponse.data.private_key_bundle,
+                masterKey
+            )
+            const signature = await signChallenge(
+                privateKeys.signing,
+                challengeResponse.data.challenge
+            )
+
+            const verifyPayload = {
+                challenge_id: challengeResponse.data.challenge_id,
+                signature
+            }
+            if (totpCode) {
+                verifyPayload.totp_code = totpCode
+            }
+
+            const response = await api.post('/login/verify', verifyPayload)
+
+            const certificateIsValid = await verifyUserPublicKeysCertificate(
+                serverPublicKey,
+                response.data.user
+            )
+            if (!certificateIsValid) {
+                throw new Error('El certificado de las claves del usuario no es válido')
+            }
+
+            storePrivateKeys(privateKeys)
+            storeIdentity(response.data.user, serverPublicKey)
+            this.$emit('login-success', response.data)
         },
 
         async registerUser() {
@@ -607,7 +853,7 @@ export default {
                     deriveAuthKey(masterKey)
                 ])
 
-                const response = await api.post('/register', {
+                const payload = {
                     name: this.name,
                     surname: this.lastName,
                     email: this.email,
@@ -616,7 +862,14 @@ export default {
                     public_key: publicKey,
                     signing_public_key: signingPublicKey,
                     private_key_bundle: privateKeyBundle
-                })
+                }
+
+                if (this.enable2FA && this.totpData && this.totpCode) {
+                    payload.totp_secret = this.totpData.secret
+                    payload.totp_code = this.totpCode
+                }
+
+                const response = await api.post('/register', payload)
 
                 // Llveamos el evento al padre
                 this.$emit('register-success', response.data)
@@ -859,5 +1112,68 @@ export default {
     margin: 1.5rem 0 0;
     font-size: 0.8125rem;
     color: var(--sb-muted);
+}
+
+/* Verificación en dos pasos */
+.step-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    margin-bottom: 1.25rem;
+    border-radius: 50%;
+    font-size: 1.375rem;
+    color: var(--sb-navy-800);
+    background-color: #e8eef5;
+}
+
+.option-box {
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--sb-border);
+    border-radius: var(--sb-radius);
+    background-color: var(--sb-surface-muted);
+}
+
+.option-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    color: var(--sb-navy-800);
+    background-color: #e1e9f3;
+}
+
+.option-title {
+    display: block;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--sb-navy-900);
+}
+
+.option-badge {
+    margin-left: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid var(--sb-border-strong);
+    border-radius: 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--sb-muted);
+}
+
+.option-text {
+    display: block;
+    font-size: 0.8125rem;
+    color: var(--sb-muted);
+}
+
+.option-content {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--sb-border);
 }
 </style>

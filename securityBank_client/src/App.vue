@@ -12,13 +12,10 @@
         </a>
 
         <nav class="app-nav" aria-label="Navegación principal">
-          <button type="button" class="nav-item" :class="{ active: !showDocuments }"
-            :aria-current="!showDocuments ? 'page' : null" @click="openAccounts">
-            Cuentas
-          </button>
-          <button type="button" class="nav-item" :class="{ active: showDocuments }"
-            :aria-current="showDocuments ? 'page' : null" @click="showDocuments = true">
-            Documentos
+          <button v-for="item in sections" :key="item.id" type="button" class="nav-item"
+            :class="{ active: section === item.id }" :aria-current="section === item.id ? 'page' : null"
+            @click="openSection(item.id)">
+            {{ item.label }}
           </button>
         </nav>
 
@@ -37,7 +34,9 @@
     </header>
 
     <main class="container app-main">
-      <UserDocuments v-if="showDocuments" @session-expired="handleLogout('expired')" />
+      <UserDocuments v-if="section === 'documents'" @session-expired="handleLogout('expired')" />
+
+      <UserSecurity v-else-if="section === 'security'" />
 
       <UserAccounts v-else-if="!selectedAccount" @select-account="handleSelectAccount" />
 
@@ -64,6 +63,7 @@ import LoginScreen from './components/LoginScreen.vue';
 import SecurityBankMainView from './components/SecurityBankMainView.vue';
 import UserAccounts from './components/UserAccounts.vue';
 import UserDocuments from './components/UserDocuments.vue';
+import UserSecurity from './components/UserSecurity.vue';
 import api from './api/axios';
 import { clearSession } from './services/keyStore';
 
@@ -78,6 +78,13 @@ const logoutNotices = {
   expired: 'Tu sesión ha caducado. Vuelve a iniciar sesión para continuar.'
 }
 
+// Secciones de la navegación principal.
+const sections = [
+  { id: 'accounts', label: 'Cuentas' },
+  { id: 'documents', label: 'Documentos' },
+  { id: 'security', label: 'Seguridad' }
+]
+
 export default {
 
   // Componentes importados
@@ -86,15 +93,17 @@ export default {
     LoginScreen,
     UserAccounts,
     SecurityBankMainView,
-    UserDocuments
+    UserDocuments,
+    UserSecurity
   },
 
   // Datos de la propia plantilla
   data() {
     return {
+      sections,
       isAuthenticated: false,
       selectedAccount: null,
-      showDocuments: false,
+      section: 'accounts',
       user: { name: '', email: '' },
       logoutNotice: ''
     }
@@ -151,7 +160,7 @@ export default {
       clearSession()
       this.revokeSession()
       this.selectedAccount = null
-      this.showDocuments = false
+      this.section = 'accounts'
       this.user = { name: '', email: '' }
       this.logoutNotice = logoutNotices[reason]
       this.isAuthenticated = false
@@ -174,7 +183,12 @@ export default {
     },
 
     openAccounts() {
-      this.showDocuments = false
+      this.openSection('accounts')
+    },
+
+    // Cambia de sección y, si se vuelve a Cuentas, muestra el listado.
+    openSection(section) {
+      this.section = section
       this.selectedAccount = null
     }
   }
@@ -236,7 +250,8 @@ export default {
 }
 
 .nav-item {
-  padding: 0 0.875rem;
+  padding: 0 0.5rem;
+  font-size: 0.9375rem;
   border: 0;
   border-bottom: 3px solid transparent;
   margin-bottom: -3px;
@@ -279,7 +294,11 @@ export default {
 }
 
 .user-email {
+  max-width: 16rem;
+  overflow: hidden;
   font-size: 0.75rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: rgb(255 255 255 / 65%);
 }
 
@@ -316,16 +335,16 @@ export default {
   display: none;
 }
 
+/* Cada elemento de la cabecera aparece cuando cabe junto a las tres secciones. */
 @media (min-width: 576px) {
-  .brand-name,
   .logout-label {
     display: inline;
   }
 }
 
 @media (min-width: 768px) {
-  .avatar {
-    display: inline-flex;
+  .brand-name {
+    display: inline;
   }
 
   .app-nav {
@@ -334,6 +353,17 @@ export default {
 }
 
 @media (min-width: 992px) {
+  .avatar {
+    display: inline-flex;
+  }
+
+  .nav-item {
+    padding: 0 0.875rem;
+    font-size: 1rem;
+  }
+}
+
+@media (min-width: 1200px) {
   .user-info {
     display: flex;
   }

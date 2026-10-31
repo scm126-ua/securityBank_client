@@ -114,6 +114,19 @@ body {
     box-shadow: 0 0 0 0.2rem rgb(31 95 168 / 18%);
 }
 
+/* Código de 6 dígitos de la verificación en dos pasos */
+.totp-input {
+    font-size: 1.375rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.35em;
+    text-align: center;
+}
+
+.totp-input::placeholder {
+    color: #c3ccd7;
+}
+
 .form-check-input:checked {
     background-color: var(--sb-navy-800);
     border-color: var(--sb-navy-800);
