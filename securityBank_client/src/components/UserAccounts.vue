@@ -1,219 +1,143 @@
 <template>
-    <div class="container mt-4">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <section>
+        <div class="page-header">
             <div>
-                <h4 class="fw-bold mb-1">Mis cuentas</h4>
-                <p class="text-muted mb-0">
-                    Selecciona una cuenta para acceder a sus detalles.
+                <h1 class="page-title">Mis cuentas</h1>
+                <p class="page-subtitle">
+                    Selecciona una cuenta para consultar su detalle y sus operaciones.
                 </p>
             </div>
 
-            <div class="d-flex align-items-center gap-3">
-                <span class="badge rounded-pill text-bg-primary">
-                    {{ accounts.length }} cuentas
-                </span>
-
-                <button type="button" class="btn btn-primary" :disabled="creating" @click="createAccount">
-                    <span v-if="creating" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                    {{ creating ? 'Creando...' : 'Nueva cuenta' }}
-                </button>
-
-                <button type="button" class="btn btn-outline-primary" @click="$emit('open-documents')">
-                    Mis documentos
-                </button>
-
-                <button type="button" class="btn btn-outline-dark" @click="open2FAModal">
-                    🛡️ Seguridad 2FA
-                </button>
-
-                <button type="button" class="btn btn-outline-secondary" @click="$emit('logout')">
-                    Cerrar sesión
-                </button>
-            </div>
+            <button type="button" class="btn btn-primary" :disabled="creating || loading" @click="createAccount">
+                <span v-if="creating" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                <AppIcon v-else name="plus" class="me-2" />
+                {{ creating ? 'Abriendo cuenta...' : 'Abrir nueva cuenta' }}
+            </button>
         </div>
 
-        <!-- Error al crear una cuenta -->
-        <div v-if="actionError" class="alert alert-danger" role="alert">
-            {{ actionError }}
+        <!-- Resultado de abrir una cuenta -->
+        <div v-if="actionError" class="alert alert-danger d-flex gap-2" role="alert">
+            <AppIcon name="alert-circle" />
+            <span>{{ actionError }}</span>
+        </div>
+
+        <div v-if="createdIBAN" class="alert alert-success d-flex gap-2" role="status">
+            <AppIcon name="check-circle" />
+            <span>Se ha abierto la cuenta <strong>{{ formatIBAN(createdIBAN) }}</strong>.</span>
         </div>
 
         <!-- Cargando cuentas -->
-        <div v-if="loading" class="text-center py-5">
-            <div class="spinner-border" style="color: #163b65" role="status">
+        <div v-if="loading" class="panel empty-state">
+            <div class="spinner-border text-primary" role="status">
                 <span class="visually-hidden">Cargando...</span>
             </div>
-            <p class="text-muted mt-3">Cargando tus cuentas...</p>
+            <p class="text-muted mt-3 mb-0">Cargando tus cuentas...</p>
         </div>
 
         <!-- Error -->
-        <div v-else-if="error" class="alert alert-danger" role="alert">
-            {{ error }}
-
-            <button class="btn btn-outline-danger btn-sm ms-2" @click="fetchAccounts">
+        <div v-else-if="error" class="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+            <AppIcon name="alert-circle" />
+            <span>{{ error }}</span>
+            <button class="btn btn-outline-danger btn-sm ms-auto" @click="fetchAccounts">
                 Reintentar
             </button>
         </div>
 
         <!-- Sin cuentas -->
-        <div v-else-if="accounts.length === 0" class="card border-0 shadow-sm">
-            <div class="card-body text-center py-5">
-                <h5 class="fw-bold">Todavía no tienes cuentas</h5>
-                <p class="text-muted mb-0">
-                    Cuando tengas una cuenta bancaria, aparecerá aquí.
-                </p>
-            </div>
+        <div v-else-if="accounts.length === 0" class="panel empty-state">
+            <span class="empty-icon">
+                <AppIcon name="bank" />
+            </span>
+            <h2 class="empty-title">Todavía no tienes cuentas</h2>
+            <p class="empty-text mb-4">
+                Abre tu primera cuenta en un solo paso. Se creará con un saldo inicial de 0,00 €.
+            </p>
+            <button type="button" class="btn btn-primary" :disabled="creating" @click="createAccount">
+                <AppIcon name="plus" class="me-2" />
+                Abrir mi primera cuenta
+            </button>
         </div>
 
-        <!-- Listado de cuentas -->
-        <div v-else class="row g-3">
-            <div v-for="account in accounts" :key="account.id" class="col-12 col-md-6 col-xl-4">
-                <button type="button" class="account-button card border-0 shadow-sm w-100 text-start h-100"
-                    @click="$emit('select-account', account)">
-                    <div class="card-body p-4">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="account-icon">
-                                <span class="fw-bold">SB</span>
-                            </div>
-
-                            <span class="badge" :class="account.status === 'ACTIVE'
-                                ? 'text-bg-success'
-                                : 'text-bg-secondary'">
-                                {{ account.status }}
-                            </span>
-                        </div>
-
-                        <p class="text-muted small mb-1">IBAN</p>
-                        <p class="fw-semibold iban-text mb-3">
-                            {{ formatIBAN(account.iban) }}
-                        </p>
-
-                        <div class="d-flex justify-content-between align-items-end">
-                            <div>
-                                <p class="text-muted small mb-1">Saldo disponible</p>
-                                <h4 class="fw-bold mb-0 balance-text">
-                                    {{ formatBalance(account.balance) }}
-                                </h4>
-                            </div>
-
-                            <span class="access-icon" aria-hidden="true">
-                                &rarr;
-                            </span>
-                        </div>
-                    </div>
-                </button>
-            </div>
-        </div>
-
-        <!-- Modal 2FA -->
-        <div v-if="show2FAModal" class="modal-backdrop fade show"></div>
-        <div v-if="show2FAModal" class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content shadow border-0 rounded-4">
-                    <div class="modal-header border-0 pb-0">
-                        <h5 class="modal-title fw-bold">Autenticación de dos factores (2FA)</h5>
-                        <button type="button" class="btn-close" aria-label="Cerrar" @click="close2FAModal"></button>
-                    </div>
-                    <div class="modal-body p-4">
-                        <div v-if="modalLoading" class="text-center py-4">
-                            <div class="spinner-border text-primary" role="status"></div>
-                            <p class="text-muted small mt-2">Cargando...</p>
-                        </div>
-
-                        <div v-else>
-                            <div v-if="modalMessage" class="alert alert-success small py-2">
-                                {{ modalMessage }}
-                            </div>
-                            <div v-if="modalError" class="alert alert-danger small py-2">
-                                {{ modalError }}
-                            </div>
-
-                            <!-- Estado 2FA Actual -->
-                            <div class="d-flex align-items-center justify-content-between p-3 border rounded-3 bg-light mb-3">
-                                <div>
-                                    <div class="fw-semibold">Estado de protección</div>
-                                    <small class="text-muted">Protege el inicio de sesión con código TOTP</small>
-                                </div>
-                                <span class="badge fs-6" :class="totpEnabled ? 'text-bg-success' : 'text-bg-secondary'">
-                                    {{ totpEnabled ? 'Activado' : 'Desactivado' }}
-                                </span>
-                            </div>
-
-                            <!-- Si 2FA está ACTIVADO -> opción de desactivar -->
-                            <div v-if="totpEnabled">
-                                <p class="small text-muted mb-3">
-                                    Tu cuenta requiere un código de 6 dígitos de tu app de autenticación cada vez que inicias sesión.
-                                </p>
-
-                                <div v-if="showDisableForm" class="p-3 border rounded-3 bg-light mb-3">
-                                    <label class="form-label fw-semibold small">Introduce el código 2FA actual para confirmar desactivación:</label>
-                                    <input v-model.trim="disableCode" type="text" maxlength="6"
-                                        class="form-control text-center fs-5 fw-bold letter-spacing mb-2"
-                                        placeholder="000000" />
-                                    <button class="btn btn-danger w-100 btn-sm" :disabled="modalActionLoading" @click="disable2FA">
-                                        {{ modalActionLoading ? 'Desactivando...' : 'Confirmar desactivación' }}
-                                    </button>
-                                </div>
-                                <div v-else>
-                                    <button class="btn btn-outline-danger w-100" @click="showDisableForm = true">
-                                        Desactivar 2FA
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Si 2FA está DESACTIVADO -> opción de configurar y activar -->
-                            <div v-else>
-                                <div v-if="setupData">
-                                    <p class="small text-muted mb-2 text-center">
-                                        1. Escanea este código QR con tu app de autenticación:
-                                    </p>
-                                    <div class="text-center mb-2">
-                                        <img :src="setupData.qr_code" alt="Código QR" class="img-thumbnail" style="width: 160px; height: 160px;" />
-                                    </div>
-                                    <div class="text-center small text-muted mb-3">
-                                        O introduce la clave manualmente: <br />
-                                        <code class="user-select-all fw-bold text-dark fs-6">{{ setupData.secret }}</code>
-                                    </div>
-                                    <label class="form-label fw-semibold small">
-                                        2. Introduce el código de 6 dígitos para verificar y activar:
-                                    </label>
-                                    <input v-model.trim="enableCode" type="text" maxlength="6"
-                                        class="form-control text-center fs-5 fw-bold letter-spacing mb-3"
-                                        placeholder="000000" />
-                                    <button class="btn btn-primary w-100" :disabled="modalActionLoading" @click="confirmEnable2FA">
-                                        {{ modalActionLoading ? 'Activando...' : 'Activar 2FA' }}
-                                    </button>
-                                </div>
-                                <div v-else>
-                                    <p class="small text-muted mb-3">
-                                        La autenticación de dos factores añade una capa de seguridad para evitar accesos no autorizados a tu banca online.
-                                    </p>
-                                    <button class="btn btn-primary w-100" :disabled="modalActionLoading" @click="start2FASetup">
-                                        {{ modalActionLoading ? 'Iniciando...' : 'Configurar y activar 2FA' }}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        <template v-else>
+            <!-- Posición global -->
+            <div class="panel summary mb-4">
+                <div class="summary-item">
+                    <span class="section-label">Saldo total</span>
+                    <span class="summary-value amount">{{ formatCurrency(totalBalance) }}</span>
+                    <span class="summary-hint">En cuentas activas</span>
+                </div>
+                <div class="summary-item">
+                    <span class="section-label">Cuentas activas</span>
+                    <span class="summary-value">{{ activeAccounts.length }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="section-label">Cuentas cerradas</span>
+                    <span class="summary-value">{{ accounts.length - activeAccounts.length }}</span>
                 </div>
             </div>
-        </div>
-    </div>
+
+            <!-- Listado de cuentas -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Cuentas</h2>
+                    <span class="small text-muted">
+                        {{ accounts.length }} {{ accounts.length === 1 ? 'cuenta' : 'cuentas' }}
+                    </span>
+                </div>
+
+                <ul class="list-unstyled mb-0">
+                    <li v-for="account in sortedAccounts" :key="account.id" class="account-item">
+                        <button type="button" class="account-row" :class="{ closed: account.status !== 'ACTIVE' }"
+                            @click="$emit('select-account', account)">
+                            <span class="account-icon">
+                                <AppIcon name="bank" />
+                            </span>
+
+                            <span class="account-main">
+                                <span class="account-iban">{{ formatIBAN(account.iban) }}</span>
+                                <span class="account-meta">Abierta el {{ formatDate(account.created_at) }}</span>
+                            </span>
+
+                            <span class="status-badge"
+                                :class="account.status === 'ACTIVE' ? 'status-active' : 'status-closed'">
+                                {{ accountStatusLabel(account.status) }}
+                            </span>
+
+                            <span class="account-balance">
+                                <span class="section-label">Saldo</span>
+                                <span class="amount">{{ formatCurrency(account.balance) }}</span>
+                            </span>
+
+                            <AppIcon name="chevron-right" class="account-chevron" />
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </template>
+    </section>
 </template>
 
 
 
 <script lang="ts">
 import api from '@/api/axios';
+import { accountStatusLabel, formatCurrency, formatDate, formatIBAN } from '@/utils/format';
+import AppIcon from './AppIcon.vue';
 
 interface Account {
     id: number
     iban: string
     balance: number
     status: string
+    created_at: string
 }
 
 export default {
     name: 'UserAccounts',
+
+    components: { AppIcon },
+
+    emits: ['select-account'],
 
     data() {
         return {
@@ -222,19 +146,25 @@ export default {
             creating: false,
             error: '',
             actionError: '',
-
-            // Modal 2FA
-            show2FAModal: false,
-            modalLoading: false,
-            modalActionLoading: false,
-            modalError: '',
-            modalMessage: '',
-            totpEnabled: false,
-            setupData: null as { secret: string; otpauth_url: string; qr_code: string } | null,
-            enableCode: '',
-            showDisableForm: false,
-            disableCode: ''
+            createdIBAN: '',
         }
+    },
+
+    computed: {
+        activeAccounts(): Account[] {
+            return this.accounts.filter((account) => account.status === 'ACTIVE')
+        },
+
+        // Suma de los saldos de las cuentas activas.
+        totalBalance(): number {
+            return this.activeAccounts.reduce((total, account) => total + Number(account.balance), 0)
+        },
+
+        // Primero las cuentas activas y, dentro de cada grupo, por orden de apertura.
+        sortedAccounts(): Account[] {
+            return [...this.accounts].sort((a, b) =>
+                Number(b.status === 'ACTIVE') - Number(a.status === 'ACTIVE') || a.id - b.id)
+        },
     },
 
     mounted() {
@@ -242,14 +172,18 @@ export default {
     },
 
     methods: {
+        accountStatusLabel,
+        formatCurrency,
+        formatDate,
+        formatIBAN,
+
         async fetchAccounts() {
             this.loading = true
             this.error = ''
 
             try {
-                await api.get('/accounts').then((response) => {
-                    this.accounts = response.data.accounts || []
-                })
+                const response = await api.get('/accounts')
+                this.accounts = response.data.accounts || []
             } catch (err) {
                 console.error('Error al cargar las cuentas:', err)
                 this.error = 'No se han podido cargar tus cuentas.'
@@ -266,6 +200,7 @@ export default {
 
             this.creating = true
             this.actionError = ''
+            this.createdIBAN = ''
 
             try {
                 const response = await api.post('/accounts')
@@ -273,117 +208,14 @@ export default {
 
                 if (account) {
                     this.accounts.push(account)
+                    this.createdIBAN = account.iban
                 }
             } catch (err) {
                 console.error('Error al crear la cuenta:', err)
-                this.actionError = 'No se ha podido crear la cuenta.'
+                this.actionError = 'No se ha podido abrir la cuenta.'
             } finally {
                 this.creating = false
             }
-        },
-
-        async open2FAModal() {
-            this.show2FAModal = true
-            this.modalError = ''
-            this.modalMessage = ''
-            this.setupData = null
-            this.showDisableForm = false
-            this.enableCode = ''
-            this.disableCode = ''
-            await this.fetch2FAStatus()
-        },
-
-        close2FAModal() {
-            this.show2FAModal = false
-            this.setupData = null
-            this.showDisableForm = false
-            this.modalError = ''
-            this.modalMessage = ''
-        },
-
-        async fetch2FAStatus() {
-            this.modalLoading = true
-            try {
-                const res = await api.get('/totp/status')
-                this.totpEnabled = res.data.totp_enabled
-            } catch (err: any) {
-                this.modalError = err.response?.data?.error || 'Error al obtener estado 2FA'
-            } finally {
-                this.modalLoading = false
-            }
-        },
-
-        async start2FASetup() {
-            this.modalActionLoading = true
-            this.modalError = ''
-            try {
-                const res = await api.post('/totp/setup')
-                this.setupData = res.data
-            } catch (err: any) {
-                this.modalError = err.response?.data?.error || 'Error al iniciar configuración 2FA'
-            } finally {
-                this.modalActionLoading = false
-            }
-        },
-
-        async confirmEnable2FA() {
-            if (!this.enableCode || this.enableCode.length !== 6) {
-                this.modalError = 'Introduce un código de 6 dígitos válido.'
-                return
-            }
-
-            this.modalActionLoading = true
-            this.modalError = ''
-            try {
-                await api.post('/totp/enable', { code: this.enableCode })
-                this.totpEnabled = true
-                this.setupData = null
-                this.enableCode = ''
-                this.modalMessage = 'Autenticación de dos factores activada con éxito.'
-            } catch (err: any) {
-                this.modalError = err.response?.data?.error || 'Código incorrecto. No se pudo activar el 2FA.'
-            } finally {
-                this.modalActionLoading = false
-            }
-        },
-
-        async disable2FA() {
-            if (!this.disableCode || this.disableCode.length !== 6) {
-                this.modalError = 'Introduce el código de 6 dígitos.'
-                return
-            }
-
-            this.modalActionLoading = true
-            this.modalError = ''
-            try {
-                await api.post('/totp/disable', { code: this.disableCode })
-                this.totpEnabled = false
-                this.showDisableForm = false
-                this.disableCode = ''
-                this.modalMessage = 'Autenticación de dos factores desactivada.'
-            } catch (err: any) {
-                this.modalError = err.response?.data?.error || 'Código incorrecto. No se pudo desactivar el 2FA.'
-            } finally {
-                this.modalActionLoading = false
-            }
-        },
-
-        formatIBAN(iban: string): string {
-            return iban
-                .replace(/\s/g, '')
-                .replace(/(.{4})/g, '$1 ')
-                .trim()
-        },
-
-        formatBalance(balance: number): string {
-            return new Intl.NumberFormat('es-ES', {
-                style: 'currency',
-                currency: 'EUR',
-            }).format(balance)
-        },
-
-        openAccount(account: Account) {
-            this.$emit('select-account', account)
         },
     },
 }
@@ -392,65 +224,140 @@ export default {
 
 
 <style scoped>
-.account-button {
-    color: #163b65;
-    background-color: #ffffff;
-    border-radius: 12px;
-    transition:
-        transform 0.2s ease,
-        box-shadow 0.2s ease;
-    cursor: pointer;
+/* Posición global */
+.summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
 
-.account-button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 20px rgb(22 59 101 / 12%) !important;
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1.25rem 1.5rem;
 }
 
-.account-button:focus-visible {
-    outline: 3px solid #2878c8;
-    outline-offset: 3px;
+.summary-item + .summary-item {
+    border-left: 1px solid var(--sb-border);
+}
+
+.summary-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--sb-navy-900);
+}
+
+.summary-hint {
+    font-size: 0.8125rem;
+    color: var(--sb-muted);
+}
+
+@media (max-width: 575.98px) {
+    .summary {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .summary-item:first-child {
+        grid-column: 1 / -1;
+        border-bottom: 1px solid var(--sb-border);
+    }
+
+    .summary-item + .summary-item {
+        border-left: 0;
+    }
+
+    .summary-item:last-child {
+        border-left: 1px solid var(--sb-border);
+    }
+}
+
+/* Listado */
+.account-item + .account-item {
+    border-top: 1px solid var(--sb-border);
+}
+
+.account-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    width: 100%;
+    padding: 1rem 1.25rem;
+    border: 0;
+    text-align: left;
+    color: var(--sb-text);
+    background-color: var(--sb-surface);
+    transition: background-color 0.15s ease;
+}
+
+.account-row:hover {
+    background-color: var(--sb-surface-muted);
+}
+
+.account-row:focus-visible {
+    outline: 2px solid var(--sb-blue-600);
+    outline-offset: -2px;
 }
 
 .account-icon {
-    display: flex;
+    display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    color: #ffffff;
-    background-color: #163b65;
-    border-radius: 10px;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.5rem;
+    font-size: 1.25rem;
+    color: var(--sb-navy-800);
+    background-color: #e8eef5;
 }
 
-.iban-text {
+.account-main {
+    display: flex;
+    flex: 1 1 14rem;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.account-iban {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--sb-navy-900);
     overflow-wrap: anywhere;
-    font-size: 0.9rem;
-    letter-spacing: 0.3px;
 }
 
-.balance-text {
-    color: #163b65;
+.account-meta {
+    font-size: 0.8125rem;
+    color: var(--sb-muted);
 }
 
-.access-icon {
+.account-balance {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    color: #ffffff;
-    background-color: #2878c8;
-    border-radius: 50%;
-    font-size: 1.3rem;
-    transition: transform 0.2s ease;
+    flex-direction: column;
+    align-items: flex-end;
+    min-width: 8.5rem;
+    margin-left: auto;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--sb-navy-900);
 }
 
-.account-button:hover .access-icon {
-    transform: translateX(3px);
+.account-chevron {
+    color: var(--sb-muted);
+    transition: transform 0.15s ease;
 }
 
-.letter-spacing {
-    letter-spacing: 0.35rem;
+.account-row:hover .account-chevron {
+    transform: translateX(2px);
+}
+
+.account-row.closed .account-icon {
+    color: var(--sb-muted);
+    background-color: #edf0f3;
+}
+
+.account-row.closed .account-iban,
+.account-row.closed .account-balance {
+    color: var(--sb-muted);
 }
 </style>
