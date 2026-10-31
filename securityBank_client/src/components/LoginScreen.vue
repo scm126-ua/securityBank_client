@@ -778,8 +778,20 @@ export default {
             this.errors.loginTotpCode = ''
 
             try {
+                // El servidor consume el desafío en cada verificación, también si el código
+                // falla, y lo caduca a los 2 minutos: en esos casos se pide uno nuevo.
+                const expiresAt = new Date(this.pendingChallengeResponse?.data.expires_at)
+                if (!this.pendingChallengeResponse || !(expiresAt > new Date())) {
+                    this.pendingChallengeResponse = await api.post('/login/challenge', {
+                        email: this.email,
+                        auth_key: await deriveAuthKey(this.pendingMasterKey)
+                    })
+                }
+
+                const challengeResponse = this.pendingChallengeResponse
+                this.pendingChallengeResponse = null
                 await this.completeLogin(
-                    this.pendingChallengeResponse,
+                    challengeResponse,
                     this.pendingMasterKey,
                     this.pendingServerPublicKey,
                     this.loginTotpCode
