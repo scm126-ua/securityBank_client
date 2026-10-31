@@ -235,7 +235,7 @@
                                 <input id="registerEmail" v-model.trim="email" type="email" class="form-control"
                                     :class="{ 'is-invalid': errors.email }" placeholder="usuario@correo.com"
                                     autocomplete="email" maxlength="254" required
-                                    @input="errors.email = ''; serverError = ''; onEmailChange()" />
+                                    @input="errors.email = ''; serverError = ''" @change="onEmailChange" />
 
                                 <div v-if="errors.email" class="invalid-feedback">
                                     {{ errors.email }}
@@ -342,9 +342,15 @@
                                     </button>
                                 </div>
 
-                                <TotpSetup v-else-if="totpData" v-model="totpCode" :setup="totpData"
-                                    input-id="registerTotpCode" :error="errors.totpCode"
-                                    @update:model-value="errors.totpCode = ''; serverError = ''" />
+                                <template v-else-if="totpData">
+                                    <TotpSetup v-model="totpCode" :setup="totpData" input-id="registerTotpCode"
+                                        :error="errors.totpCode"
+                                        @update:model-value="errors.totpCode = ''; serverError = ''" />
+                                    <p class="option-text mt-3 mb-0">
+                                        Si cambias el correo electrónico, se generará un código QR nuevo que tendrás que
+                                        volver a escanear.
+                                    </p>
+                                </template>
                             </div>
                         </div>
 
@@ -523,10 +529,12 @@ export default {
             this.loginTotpCode = ''
         },
 
+        // Al terminar de editar el correo con el QR ya generado, se genera otro (y otro secreto):
+        // el código escrito era del secreto anterior, así que se borra.
         onEmailChange() {
             if (this.enable2FA && this.totpData) {
-                // Si el usuario cambia el email después de generar el QR, refrescamos el QR si es válido
                 if (this.isValidEmail(this.email)) {
+                    this.totpCode = ''
                     this.generateRegistrationTotp()
                 }
             }
