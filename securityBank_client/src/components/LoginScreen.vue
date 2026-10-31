@@ -1136,7 +1136,7 @@ export default {
 
 /* Verificación en dos pasos */
 .step-icon {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
     width: 3rem;
