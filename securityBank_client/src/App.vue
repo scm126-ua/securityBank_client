@@ -212,7 +212,7 @@ export default {
 .header-content {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
   min-height: 4rem;
 }
 
@@ -250,8 +250,8 @@ export default {
 }
 
 .nav-item {
-  padding: 0 0.5rem;
-  font-size: 0.9375rem;
+  padding: 0 0.375rem;
+  font-size: 0.875rem;
   border: 0;
   border-bottom: 3px solid transparent;
   margin-bottom: -3px;
@@ -337,6 +337,15 @@ export default {
 
 /* Cada elemento de la cabecera aparece cuando cabe junto a las tres secciones. */
 @media (min-width: 576px) {
+  .header-content {
+    gap: 1rem;
+  }
+
+  .nav-item {
+    padding: 0 0.5rem;
+    font-size: 0.9375rem;
+  }
+
   .logout-label {
     display: inline;
   }
