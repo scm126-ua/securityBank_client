@@ -1,4 +1,3 @@
-
 import axios from 'axios'
 
 // La sesión viaja en una cookie HttpOnly que el navegador envía solo a la API:
